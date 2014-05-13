@@ -1,0 +1,33 @@
+<pre>
+<tt>
+<i><font color="#9A1900">###</font></i>
+<i><font color="#9A1900">### the standard unittest-derived test</font></i>
+<i><font color="#9A1900">###</font></i>
+
+<b><font color="#0000FF">import</font></b> unittest
+
+<b><font color="#0000FF">class</font></b> <b><font color="#000000">ExampleTest</font></b><font color="#990000">(</font>unittest<font color="#990000">.</font>TestCase<font color="#990000">)</font><font color="#990000">:</font>
+    <b><font color="#0000FF">def</font></b> <b><font color="#000000">test_a</font></b><font color="#990000">(</font>self<font color="#990000">)</font><font color="#990000">:</font>
+        self<font color="#990000">.</font><b><font color="#000000">assert_</font></b><font color="#990000">(</font><font color="#993399">1</font> <font color="#990000">=</font><font color="#990000">=</font> <font color="#993399">1</font><font color="#990000">)</font>
+
+<i><font color="#9A1900">###</font></i>
+<i><font color="#9A1900">### an unparented test -- no encapsulating class, just any fn starting with</font></i>
+<i><font color="#9A1900">### 'test'.</font></i>
+<i><font color="#9A1900">###</font></i>
+        
+<b><font color="#0000FF">def</font></b> <b><font color="#000000">test_b</font></b><font color="#990000">(</font><font color="#990000">)</font><font color="#990000">:</font>
+<i><font color="#9A1900">    """</font></i>
+<i><font color="#9A1900">    Raw, unparented test.</font></i>
+<i><font color="#9A1900">    """</font></i>
+    <b><font color="#0000FF">assert</font></b> <font color="#FF0000">'b'</font> <font color="#990000">=</font><font color="#990000">=</font> <font color="#FF0000">'b'</font>
+
+<i><font color="#9A1900">###</font></i>
+<i><font color="#9A1900">### non-unittest derived test -- class is instantiated, then functions</font></i>
+<i><font color="#9A1900">### starting with 'test' are executed.</font></i>
+<i><font color="#9A1900">###</font></i>
+
+<b><font color="#0000FF">class</font></b> TestExampleTwo<font color="#990000">:</font>
+    <b><font color="#0000FF">def</font></b> <b><font color="#000000">test_c</font></b><font color="#990000">(</font>self<font color="#990000">)</font><font color="#990000">:</font>
+        <b><font color="#0000FF">assert</font></b> <font color="#FF0000">'c'</font> <font color="#990000">=</font><font color="#990000">=</font> <font color="#FF0000">'c'</font>
+</tt>
+</pre>
