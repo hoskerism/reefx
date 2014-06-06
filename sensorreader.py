@@ -162,8 +162,9 @@ class SensorReader(WorkerThread):
             if self.stoprequest:
                 break
 
-            self.debug("Checking if timeout < now: {0} < {1}".format(timeout, datetime.now()), DebugLevels.SCREEN)
+            self.debug("Checking if timeout < now: {0} < {1}".format(timeout, datetime.now()))
             if timeout < datetime.now():
+                self.debug("The sensor timeout has expired ({0})".format(timeout), DebugLevels.ALL)
                 raise SensorException("The timeout has expired reading sensor {0} after {1} attempt(s)".format(sensor, i))
             
             # We should be able to read other sensors here.
@@ -231,6 +232,8 @@ class SensorReader(WorkerThread):
     def getcputemperature(self):
         # TODO: This has caused SensorReader to hang. Basically the CPU temperature was never returned.
         # If it happens again then I'll need to look into fixing.
+        # Update it has happened again. I have upgraded psutil to the latest:
+        # sudo pip install psutil --upgrade
         res = os.popen('vcgencmd measure_temp').readline()
         return float(res.replace("temp=","").replace("'C\n",""))  
     

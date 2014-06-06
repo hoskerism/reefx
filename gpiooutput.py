@@ -7,6 +7,7 @@ from devices.MCP230xx.MCP230xx import MCP230XX
 import db
 from workerthread import WorkerThread
 from constants import Statuses, Devices, MessageTypes, MessageCodes, DebugLevels
+from customexceptions import GPIOException
 
 class Bus():
     I2C = 'I2C'
@@ -58,14 +59,14 @@ class GPIOOutput(WorkerThread):
             },
         Devices.HEATER_1:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:5,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:9,
              DeviceConstants.ACTIVE:Output.HIGH # Connect one heater to a NC terminal so it continues to run on its thermostat if the heartbeat fails 
             },
         Devices.HEATER_2:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:6,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:10,
              DeviceConstants.ACTIVE:Output.LOW
             },
         Devices.FAN_DISPLAY:
@@ -88,8 +89,8 @@ class GPIOOutput(WorkerThread):
             },
         Devices.WAVEMAKER_FR:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:10,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:8,
              DeviceConstants.ACTIVE:Output.HIGH # Set the Pin HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
             },                                  # At least one wavemaker should be connected like this, to a power protected outlet
         Devices.WAVEMAKER_FL:
@@ -118,32 +119,32 @@ class GPIOOutput(WorkerThread):
             },
         Devices.SUMP_LIGHTING:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:15,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:11,
              DeviceConstants.ACTIVE:Output.HIGH
-            },
+            }, # Wired to NC terminals as it is almost always on
         Devices.STATUS_LED_RED:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x21,
-             DeviceConstants.PIN:15,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:7,
              DeviceConstants.ACTIVE:Output.HIGH
             },        
         Devices.STATUS_LED_YELLOW:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x21,
-             DeviceConstants.PIN:14,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:6,
              DeviceConstants.ACTIVE:Output.HIGH
             },
         Devices.STATUS_LED_GREEN:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x21,
-             DeviceConstants.PIN:13,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:5,
              DeviceConstants.ACTIVE:Output.HIGH
             },
         Devices.HEARTBEAT:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x21,
-             DeviceConstants.PIN:12,
+             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.PIN:4,
              DeviceConstants.ACTIVE:Output.HIGH
             }
             #,
@@ -188,7 +189,11 @@ class GPIOOutput(WorkerThread):
                 busnum = device[DeviceConstants.BUS_ADDRESS]
                 mcp = self.mcp[busnum]
                 self.debug("Setting device {0}: {1}".format(deviceKey, value))
-                mcp.output(device[DeviceConstants.PIN], value)
+
+                try:
+                    mcp.output(device[DeviceConstants.PIN], value)
+                except IOError as e:
+                    raise GPIOException("Error setting device output {0}: {1} ({2})".format(deviceKey, value, str(e)))
 
             self.deviceCache[deviceKey] = logValue
 

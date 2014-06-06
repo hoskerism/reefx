@@ -1,5 +1,6 @@
 #!/user/bin/python
 
+from datetime import datetime
 import threading
 import Queue
 from constants import MessageCodes
@@ -9,13 +10,13 @@ from constants import Statuses
 class WorkerManager():
     lastLoggedStatus = None
     lastLoggedStatusMessage = ''
-    statusTime = None
     statusMessage = ''
 
     sensorQueue = None
     gpioOutputQueue = None
     
     def __init__(self, name, outQueue):
+        self.statusTime = datetime.now()
         self.queue = Queue.Queue()
         self.worker = name(self.queue, outQueue)
         self.name = self.worker.__class__.__name__

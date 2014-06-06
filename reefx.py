@@ -109,6 +109,13 @@ class ReefX(WorkerBase):
                 worker.start(sensorQueue, gpioOutputQueue)
                 
     def teardown(self, sig=signal.SIGINT):
+
+        # Send any emails that are waiting in the cache
+        try:
+            self.sendstatusemail()
+        except Exception:
+            pass
+        
         # Terminate threads here.
         # NB: It matters what order we terminate threads.
         # Eg: If a thread is waiting on a sensor reading, and the sensor reader has
@@ -164,30 +171,29 @@ class ReefX(WorkerBase):
             sendEmail = False
 
             if (worker.status > Statuses.OK and worker.status != Statuses.UNDEFINED) or (worker.lastLoggedStatus is not None and worker.status != worker.lastLoggedStatus): # Don't add the initial 'OK' to the email.
-                self.debug("Add to cache? {0}:{1} / {2}:{3}".format(worker.status, worker.lastLoggedStatus, worker.statusMessage, worker.lastLoggedStatusMessage))
                 if worker.status != worker.lastLoggedStatus or worker.statusMessage != worker.lastLoggedStatusMessage:
-
-                    self.debug("Adding status to cache for {0}".format(worker.name))
-                    
                     if worker.name not in self.emailCache:
-                        self.debug("Creating email cache for {0}".format(worker.name))
                         self.emailCache[worker.name] = []
 
                     self.emailCache[worker.name].append(request)
-                    self.emailCacheFlushTime = datetime.now + timedelta(seconds=3600)
+
+                    if self.emailCacheFlushTime == None:
+                        self.emailCacheFlushTime = datetime.now() + timedelta(seconds=3600)
+                        
                     self.debug("emailcache contains {0} items".format(len(self.emailCache[worker.name])))
                     if len(self.emailCache[worker.name]) >= 20 or (worker.status > Statuses.WARNING and worker.status > worker.lastLoggedStatus):
+                        self.debug("sending email condition A for worker {0}".format(worker.name), DebugLevels.ALL)
                         sendEmail = True
 
-            if not sendEmail and self.emailCacheFlushTime is not None and self.emailCacheFlushTime > datetime.now():
+            if not sendEmail and self.emailCacheFlushTime is not None and self.emailCacheFlushTime < datetime.now():
                 # Do we have something to send
-                self.debug("TODO: Waited over an hour since last message. Checking email cache.", DebugLevels.ALL)
+                self.debug("TODO: Waited over an hour since last message. Checking email cache. emailCacheFlushTime {0}".format(self.emailCacheFlushTime), DebugLevels.ALL)
                 for workerName in self.workers:
                     if workerName not in self.emailCache:
                         continue
                     elif len(self.emailCache[workerName]) > 0:
                         sendEmail = True
-                        self.debug("TODO: We have something to send for {0}".format(workerName), DebugLevels.ALL)
+                        self.debug("TODO: We have {0} items to send for {1}".format(len(self.emailCache[workerName]), workerName), DebugLevels.ALL)
                         break
                 
             if sendEmail:
@@ -289,11 +295,23 @@ class ReefX(WorkerBase):
                 
         for key, worker in self.workers.iteritems():
             # We've got to go back two time periods, otherwise only the first responder will be OK.
-            if worker.statusTime != None and worker.statusTime < self.lastStatusRequestTime and worker.status != Statuses.CRITICAL:
-                worker.status = Statuses.CRITICAL
-                worker.statusMessage = "Status response was not received. Requested at {0}. Last response: {1}".format(self.lastStatusRequestTime, worker.statusTime)
-                db.logstatus(worker.name, Statuses.CRITICAL, worker.statusMessage)
+            if worker.statusTime < self.lastStatusRequestTime:
 
+                if worker.status != Statuses.CRITICAL:
+                    worker.status = Statuses.CRITICAL
+                    worker.statusMessage = "Status response was not received. Requested at {0}. Last response: {1}".format(self.lastStatusRequestTime, worker.statusTime)
+                    db.logstatus(worker.name, Statuses.CRITICAL, worker.statusMessage)
+
+                if worker.statusTime < self.lastStatusRequestTime - timedelta(seconds=300):
+                    # The worker has been unresponsive for over 5 minutes. Issue a command to reboot 1 minute from now.
+                    os.system("shutdown -r 1")
+
+                    self.logalert("Emergency Reboot", "Worker {0} has been unresponsive for over five minutes. Initiating Emergency reboot.".format(worker.name))
+                    self.sendemail("Emergency Reboot", "Worker {0} has been unresponsive for over five minutes. Initiating Emergency reboot.".format(worker.name))
+
+                    self.teardown()
+                    sys.exit(0)
+                
             if worker.status > self.systemStatus:
                 self.systemStatus = worker.status
             if worker.statusMessage != '':
@@ -332,7 +350,8 @@ class ReefX(WorkerBase):
 
         self.emailCacheFlushTime = None
 
-        self.sendemail("ReefX Status: {0}".format(Statuses.codes[status]), text)
+        if text != "":
+            self.sendemail("ReefX Status: {0}".format(Statuses.codes[status]), text)
 
     # Shutdown / Ctrl+C handler
     def shutdownhandler(self, signum = None, frame = None):

@@ -49,7 +49,6 @@ class Heartbeat(ProgramRunner):
 
                 if self.safeModeEndTime != None and self.safeModeEndTime > datetime.now():
                     self.setstatus(Statuses.ALERT, "Heartbeat Suspended: Safe Mode Engaged until {0}".format(self.safeModeEndTime.strftime("%H:%M:%S")))
-                    self.debug("Safe Mode should remain active for at least five minutes", DebugLevels.SCREEN)
                     self.heartbeatStatus = False
                 else:
                     # TODO: This is the start of a software solution to what is probably an electronics problem. The relays do initialise correctly if they're supplied

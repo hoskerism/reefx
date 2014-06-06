@@ -82,6 +82,11 @@ class TemperatureController(WorkerThread):
             self.cleanup(message)
 
         else:
+            if abs(self.sumpTemp - self.displayTemp) > 4:
+                message = "Sump temperature differs from display temperature by {0} degrees. This may indicate that the return pump is not functioning or that the sensor data is incorrect.".format(round(abs(self.sumpTemp - self.displayTemp), 1))
+                self.logwarning("Sump Temp vs Display Temp", message)
+                self.setstatus(Statuses.WARNING, message)
+                
             self.checkrange()
             self.checkmean()
             self.checkambient()

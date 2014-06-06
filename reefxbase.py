@@ -140,8 +140,8 @@ class ReefXBase(threading.Thread):
  
         # Define SMTP email server details
         smtp_server = 'smtp.nsw.exemail.com.au'
-        #smtp_user   = 'hoskerism@gmail.com'
-        #smtp_pass   = '' # TODO: do we need?
+        #smtp_user   = '' # Apparently not required
+        #smtp_pass   = '' # Ditto
  
         # Construct email
         msg = MIMEText(text)
