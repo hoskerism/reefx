@@ -330,7 +330,7 @@ ORDER BY date
         
         self.deviceoutput(Devices.FAN_DISPLAY, 0, logMessage=logMessage)
         self.deviceoutput(Devices.HEATER_2, 0, logMessage=logMessage)
-        self.deviceoutput(Devices.HEATER_1, 0, logMessage=logMessage) # TODO: One of these should be turned on by default.
+        self.deviceoutput(Devices.HEATER_1, 1, logMessage=logMessage) # Heater 1 is wired NC and is on by default.
         self.deviceoutput(Devices.FAN_SUMP, 0, logMessage=logMessage)
         
         self.debug("Devices off")

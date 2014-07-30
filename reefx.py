@@ -36,9 +36,11 @@ class ReefX(WorkerBase):
 
     OVERRIDE_SAFE_MODE = True
 
-    WORKER_CLASSES = [ TemperatureController, DisplayLightingController, Wavemaker, SystemMonitor,
+    WORKER_CLASSES = [ TemperatureController,
+                       DisplayLightingController, Wavemaker, SystemMonitor,
                        SumpLightingController, ProteinSkimmerController, ReturnPumpController, 
-                       SensorLogger, Heartbeat, SensorReader, GPIOOutput,
+                       SensorLogger,
+                       Heartbeat, SensorReader, GPIOOutput
                        ]
                                  # PowerProtectionController (charges battery),
                                  # AutoTopOffController etc
@@ -62,6 +64,7 @@ class ReefX(WorkerBase):
     systemStatus = Statuses.UNDEFINED
     systemStatusTime = datetime.now()
     systemStatusMessage = ''
+    systemStatusHistory = []
 
     emailCache = {}
     emailCacheFlushTime = None
@@ -77,6 +80,8 @@ class ReefX(WorkerBase):
         self.sleep()
 
         self.setglobalstatus()
+
+        self.checkglobalstatushistory()
 
     def setup(self):
         self.logaudit('System startup', 'System startup')
@@ -259,6 +264,11 @@ class ReefX(WorkerBase):
                 self.workers[workerName].relay(request)
 
             return True
+
+        elif request[MessageCodes.CODE] == MessageTypes.REBOOT_REQUEST:
+            self.reboot("Emergency reboot requested by {0} with message {1}".format(request[MessageCodes.WORKER], request[MessageCodes.VALUE]))
+
+            return True
             
         elif request[MessageCodes.CODE] == MessageTypes.EXCEPTION:
             # Used by threads that don't handle their own exceptions, eg: SocketListener
@@ -303,14 +313,8 @@ class ReefX(WorkerBase):
                     db.logstatus(worker.name, Statuses.CRITICAL, worker.statusMessage)
 
                 if worker.statusTime < self.lastStatusRequestTime - timedelta(seconds=300):
-                    # The worker has been unresponsive for over 5 minutes. Issue a command to reboot 1 minute from now.
-                    os.system("shutdown -r 1")
-
-                    self.logalert("Emergency Reboot", "Worker {0} has been unresponsive for over five minutes. Initiating Emergency reboot.".format(worker.name))
-                    self.sendemail("Emergency Reboot", "Worker {0} has been unresponsive for over five minutes. Initiating Emergency reboot.".format(worker.name))
-
-                    self.teardown()
-                    sys.exit(0)
+                    # The worker has been unresponsive for over 5 minutes. Issue a command to reboot.
+                    self.reboot("Worker {0} has been unresponsive for over five minutes. Initiating Emergency reboot.".format(worker.name))
                 
             if worker.status > self.systemStatus:
                 self.systemStatus = worker.status
@@ -329,9 +333,29 @@ class ReefX(WorkerBase):
         self.status = Statuses.OK
         self.statusMessage = ''
 
+    def checkglobalstatushistory(self):
+        self.systemStatusHistory.append({'status':self.systemStatus, 'date':datetime.now()})
+        
+        cutoff = datetime.now() - timedelta(0, 1000)
+        critical = 0.0
+        total = 0.0
+        for status in self.systemStatusHistory:
+            if status['date'] < cutoff:
+                self.systemStatusHistory.remove(status)
+            else:
+                total += 1
+                if status == Statuses.CRITICAL:
+                    critical += 1
+
+        if critical > 0:
+            self.debug("Checking global status history ({0} / {1} = {2})".format(critical, total, critical / total), DebugLevels.SCREEN)
+
+        if total > 10 and critical / total > 0.75:
+            self.reboot("System status critical ({0} / {1})".format(critical, total))
+                
     def sendstatusemail(self):
         text = ""
-        status = 0;
+        status = -1;
 
         for worker, statusList in self.emailCache.iteritems():
             self.debug("sendstatusemail: {0}, {1}".format(worker, statusList))
@@ -343,7 +367,8 @@ class ReefX(WorkerBase):
             while len(statusList) > 0:
                 request = statusList.pop()
                 text += "{0}: {1} {2}\r\n".format(request[MessageCodes.TIME].strftime("%Y-%m-%d %H:%M:%S"), Statuses.codes[request[MessageCodes.STATUS]], request[MessageCodes.MESSAGE])
-                if request[MessageCodes.STATUS] > status:
+                if status == -1:
+                    # We want to use the most recent status as the title of the email
                     status = request[MessageCodes.STATUS]
 
             text += "\r\n"
@@ -352,6 +377,17 @@ class ReefX(WorkerBase):
 
         if text != "":
             self.sendemail("ReefX Status: {0}".format(Statuses.codes[status]), text)
+
+    # Emergency reboot handler
+    def reboot(self, message):
+        # Schedule a system reboot for 1 minute from now
+        os.system("shutdown -r 1")
+
+        self.logalert("Emergency Reboot", message)
+        self.sendemail("Emergency Reboot", message)
+
+        self.teardown()
+        sys.exit(0)
 
     # Shutdown / Ctrl+C handler
     def shutdownhandler(self, signum = None, frame = None):

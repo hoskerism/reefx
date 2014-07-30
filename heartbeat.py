@@ -25,9 +25,12 @@ class Heartbeat(ProgramRunner):
         self.debug("dowork: {0} {1}".format(self.looprequest, self.stoprequest))
         while not (self.stoprequest or self.looprequest):
             self.heartbeat(self.RUNTIME)
-            if not self.looprequest and not self.stoprequest and self.systemStatus < Statuses.CRITICAL:
-                self.systemStatus += 1
-                self.logalert("Incrementing status", "{0}".format(self.systemStatus))
+            if not self.looprequest and not self.stoprequest:
+                if self.systemStatus >= Statuses.CRITICAL:
+                    self.rebootrequest("Heartbeat has not been renewed")
+                else:
+                    self.systemStatus += 1
+                    self.logalert("Incrementing status", "{0}".format(self.systemStatus))
 
     def heartbeat(self, sleepTime):
         # We're only interested in the most recent status

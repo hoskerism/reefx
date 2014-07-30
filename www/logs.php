@@ -10,7 +10,6 @@
 	
 	$page = isset($_REQUEST['page']) ? $_REQUEST['page'] : 1;
 	$row_start = ($page - 1) * 100;
-	$row_end = $page * 100;
 ?>
 
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -87,7 +86,7 @@ switch ($log_type)
 						when 5 then 'EXCEPTION'
 						else 'UNKNOWN'
 					end as level,
-					code, '' as value, message, additional, date, time_stamp
+					`code`, '' as value, message, additional, date, time_stamp
 			FROM event_log
 			WHERE 1 = 1
 			" . $date_clause . "
@@ -134,7 +133,7 @@ switch ($log_type)
 						when 5 then 'EXCEPTION'
 						else 'UNKNOWN'
 					end as level,
-					code, message, additional, date
+					`code`, message, additional, date
 			FROM event_log
 			WHERE 1 = 1
 			" . $date_clause . "
@@ -194,7 +193,7 @@ switch ($log_type)
 		
 //echo "SQL: " . $sql . "<br/>";		
 
-$logs_array = db_read($sql, $row_start, $row_end);
+$logs_array = db_read($sql, $row_start);
 
 if (count($logs_array) == 0)
 {
@@ -230,7 +229,7 @@ else
 		{
 			if ($key != 'time_stamp')
 			{
-				echo '<td class="' . $rowstyle . '" >' . str_replace("\r\n", "<br/>", $log[$key]) . '</td>';
+				echo '<td class="' . $rowstyle . '" >' . str_replace("\r\n", "<br/>", htmlspecialchars($log[$key])) . '</td>';
 			}
 		}
 		echo '</tr>';

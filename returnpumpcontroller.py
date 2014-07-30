@@ -10,5 +10,5 @@ class ReturnPumpController(ProgramRunner):
     FRIENDLY_NAME = "Return Pump Controller"
 
     def teardown(self, message):
-        self.deviceoutput(Devices.RETURN_PUMP, 1, message)
+        self.deviceoutput(Devices.RETURN_PUMP, 1, message) # return pump is on by default
         return

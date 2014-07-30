@@ -33,120 +33,144 @@ class GPIOOutput(WorkerThread):
     gpioInitialised = False
 
     devices = {
-        Devices.DISPLAY_LIGHTING_PRIMARY:
+
+        # Heartbeat / status indicators
+        Devices.STATUS_LED_GREEN:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:0,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },        
+        Devices.STATUS_LED_YELLOW:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:1,
-             DeviceConstants.ACTIVE:Output.LOW # Set the Pin LOW to activate the device - this depends on the relay and which terminals are used
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.STATUS_LED_RED:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:2,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.HEARTBEAT:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:3,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+
+        # SSR Relay devices
+        Devices.DISPLAY_LIGHTING_PRIMARY:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:8,
+             DeviceConstants.ACTIVE:Output.HIGH
             },
         Devices.DISPLAY_LIGHTING_SECONDARY:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:2,
-             DeviceConstants.ACTIVE:Output.LOW
+             DeviceConstants.PIN:9,
+             DeviceConstants.ACTIVE:Output.HIGH
             },
         Devices.DISPLAY_LIGHTING_MOONLIGHT:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:3,
-             DeviceConstants.ACTIVE:Output.LOW
+             DeviceConstants.PIN:10,
+             DeviceConstants.ACTIVE:Output.HIGH
             },
         Devices.DISPLAY_LIGHTING_RED:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:4,
-             DeviceConstants.ACTIVE:Output.LOW
-            },
-        Devices.HEATER_1:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:9,
-             DeviceConstants.ACTIVE:Output.HIGH # Connect one heater to a NC terminal so it continues to run on its thermostat if the heartbeat fails 
-            },
-        Devices.HEATER_2:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:10,
-             DeviceConstants.ACTIVE:Output.LOW
-            },
-        Devices.FAN_DISPLAY:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:7,
-             DeviceConstants.ACTIVE:Output.LOW
-            },
-        Devices.FAN_SUMP:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:8,
-             DeviceConstants.ACTIVE:Output.HIGH
-            },
-        Devices.PROTEIN_SKIMMER:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x20,
-             DeviceConstants.PIN:9,
-             DeviceConstants.ACTIVE:Output.HIGH
-            },
-        Devices.WAVEMAKER_FR:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:8,
-             DeviceConstants.ACTIVE:Output.HIGH # Set the Pin HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
-            },                                  # At least one wavemaker should be connected like this, to a power protected outlet
-        Devices.WAVEMAKER_FL:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:11,
              DeviceConstants.ACTIVE:Output.HIGH
             },
-        Devices.WAVEMAKER_RR:
+        Devices.FAN_DISPLAY:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:12,
              DeviceConstants.ACTIVE:Output.HIGH
             },
-        Devices.WAVEMAKER_RL:
+        Devices.FAN_SUMP:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:13,
              DeviceConstants.ACTIVE:Output.HIGH
             },
-        Devices.RETURN_PUMP:
+        Devices.PROTEIN_SKIMMER:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:14,
              DeviceConstants.ACTIVE:Output.HIGH
             },
+        Devices.WAVEMAKER_FL:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:15,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.WAVEMAKER_RR:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:0,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.WAVEMAKER_RL:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:1,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.FAN_LIGHTING_DISPLAY:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:2,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+
+        # NC / Power protected devices
+        # Set the PIN HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
+        Devices.WAVEMAKER_FR:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:8,
+             DeviceConstants.ACTIVE:Output.HIGH # Set the Pin HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
+            },
+        Devices.RETURN_PUMP:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:9,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+
+        # NC Devices - Active during safe mode
+        Devices.HEATER_1:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:10,
+             DeviceConstants.ACTIVE:Output.HIGH # Connect one heater to a NC terminal so it continues to run on its thermostat during safe mode 
+            },
         Devices.SUMP_LIGHTING:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
+             DeviceConstants.BUS_ADDRESS:0x21,
              DeviceConstants.PIN:11,
-             DeviceConstants.ACTIVE:Output.HIGH
-            }, # Wired to NC terminals as it is almost always on
-        Devices.STATUS_LED_RED:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:7,
-             DeviceConstants.ACTIVE:Output.HIGH
-            },        
-        Devices.STATUS_LED_YELLOW:
-            {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:6,
-             DeviceConstants.ACTIVE:Output.HIGH
+             DeviceConstants.ACTIVE:Output.HIGH # Wired to NC terminals as it is almost always on
             },
-        Devices.STATUS_LED_GREEN:
+        Devices.FAN_LIGHTING_SUMP:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:5,
-             DeviceConstants.ACTIVE:Output.HIGH
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:12,
+             DeviceConstants.ACTIVE:Output.HIGH # Wired to NC terminals as it should be on in safe mode
             },
-        Devices.HEARTBEAT:
+
+        # NO Electro-mechanical relay devices (high power / infrequent usage)
+        Devices.HEATER_2:
             {DeviceConstants.BUS:Bus.I2C,
-             DeviceConstants.BUS_ADDRESS:0x22,
-             DeviceConstants.PIN:4,
-             DeviceConstants.ACTIVE:Output.HIGH
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:13,
+             DeviceConstants.ACTIVE:Output.LOW
             }
+        
             #,
         #'GPIO_EXAMPLE_DEVICE':
         #    {DeviceConstants.BUS:Bus.GPIO,
@@ -174,6 +198,10 @@ class GPIOOutput(WorkerThread):
             return True
 
     def deviceoutput(self, deviceKey, value, module, message):
+        #if message != '':
+        #    self.debug("TODO: Bypassed GPIO for {0}: {1} ({2}) - {3}".format(deviceKey, value, module, message), DebugLevels.ALL)
+        #    return True
+    
         device = self.devices[deviceKey]
         logValue = value
         if logValue != self.deviceCache[deviceKey]:
@@ -213,12 +241,20 @@ class GPIOOutput(WorkerThread):
                                MessageCodes.VALUE:success})
 
     def setup(self):
+        #self.debug("TODO: Bypassed GPIO setup", DebugLevels.ALL)
+        #return
+        
         self.debug("Set up GPIO output")
         GPIO.setmode(GPIO.BCM)
 
         for deviceKey in self.devices:
             device = self.devices[deviceKey]
-            self.debug("Setting up device {0}".format(deviceKey))
+
+            #if deviceKey == Devices.STATUS_LED_GREEN or deviceKey == Devices.STATUS_LED_YELLOW or deviceKey == Devices.STATUS_LED_RED or deviceKey == Devices.HEARTBEAT:
+            #    self.debug("Setting up device {0}".format(deviceKey))
+            #else:
+            #    self.debug("Bypassing setup for device {0}".format(deviceKey))
+            #    continue
 
             self.deviceCache[deviceKey] = 0
 
@@ -260,6 +296,9 @@ class GPIOOutput(WorkerThread):
         return
 
     def teardown(self, message):
+        #self.debug("TODO: Bypassed GPIO teardown", DebugLevels.ALL)
+        #return
+    
         self.debug("Running GPIO cleanup")
         if self.gpioInitialised:
             GPIO.cleanup()

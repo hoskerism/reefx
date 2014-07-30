@@ -73,7 +73,7 @@ class WorkerThread(WorkerBase):
     
     # TODO: What to do with errors here?
     def readsensor(self, sensor, maxAge=60):
-        timeout = 30
+        timeout = 20
         responseQueue = Queue.Queue()
         self.sensorQueue.put({
             MessageCodes.CODE:MessageTypes.SENSOR_REQUEST,
@@ -137,10 +137,13 @@ class WorkerThread(WorkerBase):
             response = responseQueue.get(True, 30)
             self.debug("Device output received response: {0}".format(response[MessageCodes.VALUE]))
 
-            self.deviceStatuses[device] = {
-                MessageCodes.VALUE: value,
-                MessageCodes.FRIENDLY_NAME: Devices.friendlyNames[device]
-                }
+            try:
+                self.deviceStatuses[device] = {
+                    MessageCodes.VALUE: value,
+                    MessageCodes.FRIENDLY_NAME: Devices.friendlyNames[device]
+                    }
+            except KeyError as e:
+                self.logwarning("Friendly name error", "Friendly name not configured for device: {0}".format(device))
 
             responseQueue.task_done()
 
@@ -168,3 +171,12 @@ class WorkerThread(WorkerBase):
         
         return response[MessageCodes.VALUE]
         
+    def rebootrequest(self, message):
+        self.outQueue.put({
+            MessageCodes.CODE:MessageTypes.REBOOT_REQUEST,
+            MessageCodes.WORKER:self.name(),
+            MessageCodes.VALUE:message
+            })
+
+        # Schedule a reboot for two minutes from now in case reefx is not responding
+        os.system("shutdown -r 2")

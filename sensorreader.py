@@ -28,6 +28,7 @@ class SensorReader(WorkerThread):
     DEBUG_LEVEL = DebugLevels.NONE
 
     sensorCache = {}
+    readFailures = {}
 
     sensors = {
         Sensors.DISPLAY_TEMP:
@@ -42,6 +43,20 @@ class SensorReader(WorkerThread):
                 Settings.IDENTIFIER:"28-0000053c794e",
                 Settings.MIN:15,
                 Settings.MAX:35,
+                Settings.RETRIES:3
+            },
+        Sensors.DISPLAY_LIGHTING_TEMP:
+            {
+                Settings.IDENTIFIER:"28-0000053c84f1",
+                Settings.MIN:15,
+                Settings.MAX:80,
+                Settings.RETRIES:3
+            },
+        Sensors.SUMP_LIGHTING_TEMP:
+            {
+                Settings.IDENTIFIER:"28-0000053c8a8f",
+                Settings.MIN:15,
+                Settings.MAX:80,
                 Settings.RETRIES:3
             },
         Sensors.AMBIENT_TEMP:
@@ -82,22 +97,41 @@ class SensorReader(WorkerThread):
 
     def processrequest(self, request):
         if request[MessageCodes.CODE] == MessageTypes.SENSOR_REQUEST:
+            queue = request[MessageCodes.RESPONSE_QUEUE]
+            
             try:
                 if request[MessageCodes.TIMEOUT] < datetime.now():
                     raise SensorException("The timeout has already expired reading sensor {0} ({1})".format(request[MessageCodes.SENSOR], request[MessageCodes.WORKER]))
-                    
-                queue = request[MessageCodes.RESPONSE_QUEUE]
+                
                 value, friendlyValue = self.readsensor(request[MessageCodes.SENSOR], request[MessageCodes.WORKER], request[MessageCodes.TIMEOUT], request[MessageCodes.MAX_AGE])
                 self.logsensor(request[MessageCodes.SENSOR], value, request[MessageCodes.WORKER])
                 queue.put({MessageCodes.CODE:MessageTypes.SENSOR_RESPONSE,
                            MessageCodes.VALUE:value,
                            MessageCodes.FRIENDLY_VALUE:friendlyValue,
                            MessageCodes.FRIENDLY_NAME:Sensors.friendlyNames[request[MessageCodes.SENSOR]]})
+                
             except Exception as e:
                 queue.put({MessageCodes.CODE:MessageTypes.EXCEPTION,
                            MessageCodes.VALUE:e})
 
+                self.readfailure(request[MessageCodes.SENSOR])
+
             return True
+
+    def resetreadfailures(self, sensor):
+        self.readFailures[sensor] = 0;
+
+    def readfailure(self, sensor):
+        if sensor not in self.readFailures:
+            self.debug("Adding readfailure for sensor {0}".format(sensor), DebugLevels.ALL)
+            self.resetreadfailures(sensor)
+
+        self.readFailures[sensor] += 1
+        self.debug("Readfailures = {0} for sensor {1}".format(self.readFailures[sensor], sensor), DebugLevels.ALL)
+
+        if self.readFailures[sensor] > 10:
+            self.debug("Rebooting", DebugLevels.ALL)
+            self.rebootrequest("Persistent failure reading sensor: {0}. Rebooting.".format(sensor))
 
     def readsensor(self, sensor, worker, timeout, maxAge = 60):
 
@@ -110,6 +144,9 @@ class SensorReader(WorkerThread):
                 self.debug("Attempt {0}: {1}".format(i, sensor))
                 result, value, friendlyValue = self.getcachedsensorreading(sensor, maxAge)
 
+                if result:
+                    self.debug("Got from the cache", DebugLevels.SCREEN)
+                
                 if not result:
                     
                     if sensor == Sensors.DISPLAY_TEMP: 
@@ -117,6 +154,14 @@ class SensorReader(WorkerThread):
                         friendlyValue = str(round(value, 1)) + "C"
                         
                     elif sensor == Sensors.SUMP_TEMP:
+                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        friendlyValue = str(round(value, 1)) + "C"
+
+                    elif sensor == Sensors.DISPLAY_LIGHTING_TEMP:
+                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        friendlyValue = str(round(value, 1)) + "C"
+                        
+                    elif sensor == Sensors.SUMP_LIGHTING_TEMP:
                         value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
                         friendlyValue = str(round(value, 1)) + "C"
                         
@@ -171,6 +216,8 @@ class SensorReader(WorkerThread):
             self.debug("Invalid sensor reading: {0}".format(sensor))
             self.sleep(1)
 
+        self.resetreadfailures(sensor)
+
         return value, friendlyValue
 
     def getcachedsensorreading(self, sensor, maxAge):
@@ -196,10 +243,7 @@ class SensorReader(WorkerThread):
             raise SensorException("Out of range exception (max) for " + sensor + " (" + str(value) + ")")
 
     def readDHT22(self, sensor, maxAge):
-        # TODO: We should have a controllable power rail for this which
-        # allows it to be rebooted
         result = False
-
         reading = DHT22.readsensor()
         if reading != False:
             self.debug("We've got a valid reading from the sensor")
@@ -230,10 +274,8 @@ class SensorReader(WorkerThread):
         return 100 - psutil.virtual_memory().percent
 
     def getcputemperature(self):
-        # TODO: This has caused SensorReader to hang. Basically the CPU temperature was never returned.
-        # If it happens again then I'll need to look into fixing.
-        # Update it has happened again. I have upgraded psutil to the latest:
-        # sudo pip install psutil --upgrade
+        # This has caused SensorReader to hang. Basically the CPU temperature was never returned.
+        # We now have automatic reboot functionality built into reefx if a worker thread becomes unresponsive.
         res = os.popen('vcgencmd measure_temp').readline()
         return float(res.replace("temp=","").replace("'C\n",""))  
     

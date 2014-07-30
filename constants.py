@@ -31,6 +31,8 @@ class Devices():
     DISPLAY_LIGHTING_SECONDARY = 'DISPLAY_LIGHTING_SECONDARY'
     DISPLAY_LIGHTING_RED = 'DISPLAY_LIGHTING_RED'
     SUMP_LIGHTING = 'SUMP_LIGHTING'
+    FAN_LIGHTING_DISPLAY = 'FAN_LIGHTING_DISPLAY'
+    FAN_LIGHTING_SUMP = 'FAN_LIGHTING_SUMP'
     PROTEIN_SKIMMER = 'PROTEIN_SKIMMER'
     RETURN_PUMP = 'RETURN_PUMP'
 
@@ -50,6 +52,8 @@ class Devices():
                      DISPLAY_LIGHTING_PRIMARY: 'Display Lights (primary)',
                      DISPLAY_LIGHTING_SECONDARY: 'Display Lights (secondary)',
                      DISPLAY_LIGHTING_RED: 'Night Viewing Lights',
+                     FAN_LIGHTING_DISPLAY: 'Display Lighting Fans',
+                     FAN_LIGHTING_SUMP: 'Refugium Lighting Fans',
                      SUMP_LIGHTING: 'Refugium Lights',
                      PROTEIN_SKIMMER: 'Protein Skimmer',
                      RETURN_PUMP: 'Return Pump'}
@@ -67,6 +71,7 @@ class MessageTypes():
     LIST_WORKERS = 'LIST_WORKERS'
     PROGRAM_REQUEST = 'PROGRAM_REQUEST'
     PROGRAM_RESPONSE = 'PROGRAM_RESPONSE'
+    REBOOT_REQUEST = 'REBOOT_REQUEST'
     SAFE_MODE = 'SAFE_MODE'
     SENSOR_REQUEST = 'SENSOR_REQUEST'
     SENSOR_RESPONSE = 'SENSOR_RESPONSE'
@@ -104,6 +109,8 @@ class MessageCodes():
 class Sensors():
     DISPLAY_TEMP = 'DISPLAY_TEMP'
     SUMP_TEMP = 'SUMP_TEMP'
+    DISPLAY_LIGHTING_TEMP = 'DISPLAY_LIGHTING_TEMP'
+    SUMP_LIGHTING_TEMP = 'SUMP_LIGHTING_TEMP'
     AMBIENT_TEMP = 'AMBIENT_TEMP'
     AMBIENT_HUMIDITY = 'AMBIENT_HUMIDITY'
     DISK_SPACE = 'DISK_SPACE'
@@ -112,6 +119,8 @@ class Sensors():
 
     friendlyNames = {DISPLAY_TEMP:"Display Temp",
                      SUMP_TEMP:"Refugium Temp",
+                     DISPLAY_LIGHTING_TEMP:"Display Lighting Temp",
+                     SUMP_LIGHTING_TEMP:"Refugium Lighting Temp",
                      AMBIENT_TEMP:"Ambient Temp",
                      AMBIENT_HUMIDITY:"Ambient Humidity",
                      DISK_SPACE:"Disk Space",

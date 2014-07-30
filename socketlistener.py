@@ -108,7 +108,7 @@ class ClientSocket(ReefXBase):
                 self.socket.sendall("Unauthorised request")
                 return
             else:
-                self.logaudit("Socket request", "{0} from caller {1}: {2} {3}".format(request[MessageCodes.CODE], request[MessageCodes.CALLER], request[MessageCodes.IP_ADDRESS], request[MessageCodes.USERNAME]))
+                self.debug("{0} from caller {1}: {2} {3}".format(request[MessageCodes.CODE], request[MessageCodes.CALLER], request[MessageCodes.IP_ADDRESS], request[MessageCodes.USERNAME]))
 
             inQueue = Queue.Queue()
             request[MessageCodes.RESPONSE_QUEUE] = inQueue

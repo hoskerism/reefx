@@ -85,6 +85,8 @@ class ProgramRunner(WorkerThread):
             pass
         elif type(actionTime) is int and actionTime == 0:
             pass
+        elif type(actionTime) is int:
+            super(ProgramRunner, self).sleep(actionTime)
         elif type(actionTime) is datetime:
             self.debug("actionTime = {0}, scheduledTaskTime = {1}".format(actionTime, self.scheduledTaskTime))
             while actionTime > self.scheduledTaskTime and not (self.looprequest or self.stoprequest):

@@ -76,6 +76,10 @@ class ReefXBase(threading.Thread):
         self.logevent(EventLevels.ALERT, eventCode, message, additional=additional)
     
     def logevent(self, eventLevel, eventCode, message, debugLevel = DebugLevels.NONE, additional = ''):
+
+        if type(debugLevel) is not int or type(self.DEBUG_LEVEL) is not int:
+            self.printline("debugLevel should be int: {0}, {1}".format(debugLevel, self.DEBUG_LEVEL))
+
         debugLevel = debugLevel | self.DEBUG_LEVEL
 
         if eventLevel < EventLevels.WARNING:
@@ -133,28 +137,32 @@ class ReefXBase(threading.Thread):
 
     def sendemail(self, subject, text):
         self.logaudit("Sending email", subject, additional=text)
-        
-        # Define email addresses to use
-        addr_to   = 'reefx@hoskerism.com'
-        addr_from = 'reefx@hoskerism.com'
- 
-        # Define SMTP email server details
-        smtp_server = 'smtp.nsw.exemail.com.au'
-        #smtp_user   = '' # Apparently not required
-        #smtp_pass   = '' # Ditto
- 
-        # Construct email
-        msg = MIMEText(text)
-        msg['To'] = addr_to
-        msg['From'] = addr_from
-        msg['Subject'] = subject
- 
-        # Send the message via an SMTP server
-        s = smtplib.SMTP(smtp_server)
-        #s.login(smtp_user, smtp_pass) - Not required if using exetel smtp server
-        s.sendmail(addr_from, addr_to, msg.as_string())
-        s.quit()
-        
-        self.debug("Email sent")
-        
-        
+
+        try:
+            # Define email addresses to use
+            addr_to   = 'reefx@hoskerism.com'
+            addr_from = 'reefx@hoskerism.com'
+     
+            # Define SMTP email server details
+            smtp_server = 'smtp.nsw.exemail.com.au'
+            #smtp_user   = '' # Apparently not required
+            #smtp_pass   = '' # Ditto
+     
+            # Construct email
+            msg = MIMEText(text)
+            msg['To'] = addr_to
+            msg['From'] = addr_from
+            msg['Subject'] = subject
+     
+            # Send the message via an SMTP server
+            s = smtplib.SMTP(smtp_server)
+            #s.login(smtp_user, smtp_pass) - Not required if using exetel smtp server
+            s.sendmail(addr_from, addr_to, msg.as_string())
+            s.quit()
+            
+            self.debug("Email sent")
+
+        except Exception as e:
+            self.logalert("Sending Email Failed", str(e))
+            #TODO: self.setstatus(alert)... requires consolidation of base classes
+            #TODO: increment failure count. Reboot if x consecutive failures.
