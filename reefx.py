@@ -9,13 +9,13 @@ import time
 import sys
 import signal
 
+from autotopoffcontroller import AutoTopoffController
 from displaylightingcontroller import DisplayLightingController
 from gpiooutput import GPIOOutput
 from heartbeat import Heartbeat
 from proteinskimmercontroller import ProteinSkimmerController
 from returnpumpcontroller import ReturnPumpController
 from sensorreader import SensorReader
-from sensorlogger import SensorLogger
 from sumplightingcontroller import SumpLightingController
 from systemmonitor import SystemMonitor
 from temperaturecontroller import TemperatureController
@@ -23,11 +23,10 @@ from wavemaker import Wavemaker
 
 from workerbase import WorkerBase
 from socketlistener import SocketListener
-import constants
 import db
 from workermanager import WorkerManager
 import functions
-from constants import Statuses, MessageTypes, MessageCodes, DebugLevels
+from constants import ProgramCodes, Statuses, MessageTypes, MessageCodes, DebugLevels
 from customexceptions import ReefXException
 
 class ReefX(WorkerBase):
@@ -37,13 +36,15 @@ class ReefX(WorkerBase):
     OVERRIDE_SAFE_MODE = True
 
     WORKER_CLASSES = [ TemperatureController,
-                       DisplayLightingController, Wavemaker, SystemMonitor,
-                       SumpLightingController, ProteinSkimmerController, ReturnPumpController, 
-                       SensorLogger,
-                       Heartbeat, SensorReader, GPIOOutput
+                       DisplayLightingController, SumpLightingController, Wavemaker,
+                       ProteinSkimmerController, ReturnPumpController, 
+                       AutoTopoffController, SystemMonitor,
+                       Heartbeat,
+                       SensorReader,
+                       GPIOOutput
                        ]
                                  # PowerProtectionController (charges battery),
-                                 # AutoTopOffController etc
+
               
     workers = {}
     inQueue = Queue.Queue()
@@ -68,7 +69,7 @@ class ReefX(WorkerBase):
 
     emailCache = {}
     emailCacheFlushTime = None
-    
+
     def dowork(self):
         self.resetglobalstatus()
         self.lastStatusRequestTime = self.statusRequestTime
@@ -171,12 +172,16 @@ class ReefX(WorkerBase):
             worker.status = request[MessageCodes.STATUS]
             worker.statusMessage = request[MessageCodes.MESSAGE]
             worker.statusTime = request[MessageCodes.TIME]
+            worker.program = request[MessageCodes.PROGRAM]
 
             self.setglobalstatus()
             sendEmail = False
 
-            if (worker.status > Statuses.OK and worker.status != Statuses.UNDEFINED) or (worker.lastLoggedStatus is not None and worker.status != worker.lastLoggedStatus): # Don't add the initial 'OK' to the email.
-                if worker.status != worker.lastLoggedStatus or worker.statusMessage != worker.lastLoggedStatusMessage:
+            if (worker.status > Statuses.OK and worker.status != Statuses.UNDEFINED) or (worker.lastLoggedStatus is not None and worker.lastLoggedStatus != Statuses.UNDEFINED and worker.status != worker.lastLoggedStatus): # Don't add the initial 'OK' to the email.
+                if worker.status != worker.lastLoggedStatus or (worker.status > Statuses.OK and worker.statusMessage != worker.lastLoggedStatusMessage):
+
+                    self.debug("********************Adding to email cache: {0}: {1}, {2}, {3}, {4}".format(worker.name, worker.status, worker.lastLoggedStatus, worker.statusMessage, worker.lastLoggedStatusMessage), DebugLevels.SCREEN)
+                    
                     if worker.name not in self.emailCache:
                         self.emailCache[worker.name] = []
 
@@ -187,7 +192,7 @@ class ReefX(WorkerBase):
                         
                     self.debug("emailcache contains {0} items".format(len(self.emailCache[worker.name])))
                     if len(self.emailCache[worker.name]) >= 20 or (worker.status > Statuses.WARNING and worker.status > worker.lastLoggedStatus):
-                        self.debug("sending email condition A for worker {0}".format(worker.name), DebugLevels.ALL)
+                        self.debug("sending email condition A for worker {0}".format(worker.name))
                         sendEmail = True
 
             if not sendEmail and self.emailCacheFlushTime is not None and self.emailCacheFlushTime < datetime.now():
@@ -212,9 +217,44 @@ class ReefX(WorkerBase):
             return True
 			
         elif request[MessageCodes.CODE] == MessageTypes.PROGRAM_REQUEST:
-            self.debug("Received Program Request: {0}".format(request))
-            worker = self.workers[request[MessageCodes.WORKER]]
-            worker.relay(request)
+            if (request[MessageCodes.WORKER] == self.name()):
+                message = "Program {0} requested by {1} ({2} / {3})".format(request[MessageCodes.VALUE], request[MessageCodes.CALLER], request[MessageCodes.IP_ADDRESS], request[MessageCodes.USERNAME])
+                self.loginformation("Program request", message)
+                savedProgram = self.program[ProgramCodes.CODE]
+
+                if self.program[ProgramCodes.REPEAT_PROGRAM] == 0:
+                    self.programStack.append(self.program)
+                
+                self.setprogram(request[MessageCodes.VALUE], message)
+
+    		if self.program[ProgramCodes.DEFAULT_PROGRAM] == 1:
+		    self.sendresumedefaultprogramrequest(savedProgram)
+                        
+                else:
+                    # Broadcast request to all workers
+                    for workerName in self.workers:
+                        self.debug("Relaying program request to worker {0}: {1}".format(workerName, request))
+
+                        self.workers[workerName].queue.put({
+                            MessageCodes.CODE:MessageTypes.BROADCAST_REQUEST,
+                            MessageCodes.WORKER:self.name(),
+                            MessageCodes.VALUE:request[MessageCodes.VALUE],
+                            MessageCodes.MESSAGE:"Program {0} requested by {1}".format(request[MessageCodes.VALUE], self.name())})
+
+                responseQueue = request[MessageCodes.RESPONSE_QUEUE]
+                responseQueue.put({MessageCodes.CODE:MessageTypes.PROGRAM_RESPONSE,
+                    MessageCodes.VALUE:True})
+
+            else:
+                worker = self.workers[request[MessageCodes.WORKER]]
+                worker.relay(request)
+
+            return True 
+
+        elif request[MessageCodes.CODE] == MessageTypes.BROADCAST_REQUEST:
+            for workerName in self.workers:
+                self.debug("Relaying broadcast request to worker {0}: {1}".format(workerName, request))
+                self.workers[workerName].relay(request)
 
             return True
 
@@ -274,12 +314,24 @@ class ReefX(WorkerBase):
             # Used by threads that don't handle their own exceptions, eg: SocketListener
             raise request[MessageCodes.VALUE]
 
+    def sendresumedefaultprogramrequest(self, programToOverride):
+            for workerName in self.workers:
+                self.workers[workerName].queue.put({
+            MessageCodes.CODE:MessageTypes.RESUME_DEFAULT_PROGRAM_REQUEST,
+            MessageCodes.WORKER:self.name(),
+            MessageCodes.VALUE:programToOverride})
+            
+            if len(self.programStack) > 0:
+                program = self.programStack.pop()
+                self.sendresumedefaultprogramrequest(program[ProgramCodes.CODE])
+			
     def getcapabilities(self, request):
         if request[MessageCodes.WORKER] == self.name():
-            request[MessageCodes.RESPONSE_QUEUE].put({
-                MessageCodes.CODE:MessageTypes.CAPABILITIES_RESPONSE,
-                MessageCodes.WORKER:self.name()
-                })
+            super(ReefX, self).getcapabilities(request)
+            #request[MessageCodes.RESPONSE_QUEUE].put({
+            #    MessageCodes.CODE:MessageTypes.CAPABILITIES_RESPONSE,
+            #    MessageCodes.WORKER:self.name()
+            #    })
         else:
             worker = self.workers[request[MessageCodes.WORKER]]
             worker.relay(request)
@@ -302,7 +354,9 @@ class ReefX(WorkerBase):
             db.logstatus(self.name(), self.status, self.statusMessage)
             self.lastLoggedStatus = self.status
             self.lastLoggedStatusMessage = self.statusMessage
-                
+
+        self.setcurrentprogram()
+        
         for key, worker in self.workers.iteritems():
             # We've got to go back two time periods, otherwise only the first responder will be OK.
             if worker.statusTime < self.lastStatusRequestTime:
@@ -318,6 +372,7 @@ class ReefX(WorkerBase):
                 
             if worker.status > self.systemStatus:
                 self.systemStatus = worker.status
+                
             if worker.statusMessage != '':
                 self.systemStatusMessage += "{0}: {1}\r\n".format(worker.friendlyName, worker.statusMessage)
 
@@ -328,6 +383,20 @@ class ReefX(WorkerBase):
             self.loginformation("System status", "{0} - {1}".format(Statuses.codes[self.systemStatus], self.systemStatusMessage.strip()))
 
         self.indicatestatus(self.systemStatus)
+
+    def setcurrentprogram(self):
+        programRequestActive = False
+
+        for key, worker in self.workers.iteritems():
+            if self.program[ProgramCodes.DEFAULT_PROGRAM] == 0 and worker.program and (self.program[ProgramCodes.CODE] == worker.program[ProgramCodes.CODE] or worker.statusTime < self.program[ProgramCodes.START_TIME]):
+                programRequestActive = True
+
+        if not programRequestActive and self.program[ProgramCodes.DEFAULT_PROGRAM] == 0:
+            if len(self.programStack) > 0:
+                self.program = self.programStack.pop()
+                self.setcurrentprogram()
+            else:
+                self.setdefaultprogram()
 
     def resetglobalstatus(self):
         self.status = Statuses.OK

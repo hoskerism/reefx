@@ -179,7 +179,7 @@ if __name__ == '__main__':
     # Set num_gpios to 8 for MCP23008 or 16 for MCP23017!
     # ***************************************************
     #mcp = MCP230XX(address = 0x20, num_gpios = 8) # MCP23008
-    mcp = MCP230XX(address = 0x20, num_gpios = 16) # MCP23017
+    mcp = MCP230XX(address = 0x21, num_gpios = 16) # MCP23017
 
     # Set pins 0, 1 and 2 to output (you can set pins 0..15 this way)
     mcp.config(0, mcp.OUTPUT)
@@ -199,32 +199,34 @@ if __name__ == '__main__':
     mcp.config(14, mcp.OUTPUT)
     mcp.config(15, mcp.OUTPUT)
 
-    # Set pin 3 to input with the pullup resistor enabled
-    #mcp.config(3, mcp.INPUT)
-    #mcp.pullup(3, 1)
+    # Set pin 5 to input with the pullup resistor enabled
+    #mcp.config(5, mcp.INPUT)
+    #mcp.pullup(5, 1)
 
     # Read input pin and display the results
-    #print "Pin 3 = %d" % (mcp.input(3) >> 3)
+    #while (True):
+    #    print "Pin 5 = %d" % (mcp.input(5) >> 5)
+    #    time.sleep(5)
 
     # Python speed test on output 0 toggling at max speed
     print "Starting blinky on pin 0 (CTRL+C to quit)"
     while (True):
-      #mcp.output(0, 1)  # Pin 0 High
-      #time.sleep(0.2)
-      #mcp.output(1, 1)  # Pin 0 Low
-      #time.sleep(0.2)
-      #mcp.output(2, 1)
-      #time.sleep(0.2)
-      #mcp.output(3, 1)
-      #time.sleep(0.2)
-      #mcp.output(4, 1)
-      #time.sleep(0.2)
-      #mcp.output(5, 1)
-      #time.sleep(0.2)
-      #mcp.output(6, 1)
-      #time.sleep(0.2)
-      #mcp.output(7, 1)
-      #time.sleep(2)
+      mcp.output(0, 1)  # Pin 0 High
+      time.sleep(0.2)
+      mcp.output(1, 1)  # Pin 0 Low
+      time.sleep(0.2)
+      mcp.output(2, 1)
+      time.sleep(0.2)
+      mcp.output(3, 1)
+      time.sleep(0.2)
+      mcp.output(4, 1)
+      time.sleep(0.2)
+      mcp.output(5, 1)
+      time.sleep(0.2)
+      mcp.output(6, 1)
+      time.sleep(0.2)
+      mcp.output(7, 1)
+      time.sleep(2)
 
       mcp.output(8, 1)  # Pin 8 High
       time.sleep(0.2)
@@ -241,24 +243,24 @@ if __name__ == '__main__':
       mcp.output(14, 1)
       time.sleep(0.2)  
       mcp.output(15, 1)  
-      time.sleep(20);
+      time.sleep(2);
       
-      #mcp.output(0, 0)  # Pin 0 Low
-      #time.sleep(0.2)
-      #mcp.output(1, 0)  
-      #time.sleep(0.2)
-      #mcp.output(2, 0)
-      #time.sleep(0.2)
-      #mcp.output(3, 0)
-      #time.sleep(0.2)
-      #mcp.output(4, 0)
-      #time.sleep(0.2)
-      #mcp.output(5, 0)
-      #time.sleep(0.2)
-      #mcp.output(6, 0)
-      #time.sleep(0.2)
-      #mcp.output(7, 0)
-      #time.sleep(20)
+      mcp.output(0, 0)  # Pin 0 Low
+      time.sleep(0.2)
+      mcp.output(1, 0)  
+      time.sleep(0.2)
+      mcp.output(2, 0)
+      time.sleep(0.2)
+      mcp.output(3, 0)
+      time.sleep(0.2)
+      mcp.output(4, 0)
+      time.sleep(0.2)
+      mcp.output(5, 0)
+      time.sleep(0.2)
+      mcp.output(6, 0)
+      time.sleep(0.2)
+      mcp.output(7, 0)
+      time.sleep(2)
 
       mcp.output(8, 0)
       time.sleep(0.2)
@@ -275,4 +277,4 @@ if __name__ == '__main__':
       mcp.output(14, 0)
       time.sleep(0.2)
       mcp.output(15, 0)
-      time.sleep(20);
+      time.sleep(2);

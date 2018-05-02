@@ -1,13 +1,16 @@
 #!/user/bin/python
 
 import RPi.GPIO as GPIO
+from datetime import datetime, timedelta
 import time
 
-from devices.MCP230xx.MCP230xx import MCP230XX
+#from devices.MCP230xx.MCP230xx import MCP230XX
 import db
 from workerthread import WorkerThread
 from constants import Statuses, Devices, MessageTypes, MessageCodes, DebugLevels
 from customexceptions import GPIOException
+
+from i2ccontroller import I2cController
 
 class Bus():
     I2C = 'I2C'
@@ -23,11 +26,16 @@ class DeviceConstants():
     PIN = 'PIN'
     ACTIVE = 'ACTIVE'
 
+class DeviceCacheKeys():
+    STATE = 'STATE'
+    LAST_SWITCH_TIME = 'LAST_SWITCH_TIME'
+
 class GPIOOutput(WorkerThread):
 
     FRIENDLY_NAME = 'Device Output'
     OVERRIDE_SAFE_MODE = True
     DEBUG_LEVEL = DebugLevels.NONE
+    I2C_MIN_SWITCH_TIME = 0.25
 
     deviceCache = {}
     gpioInitialised = False
@@ -53,10 +61,16 @@ class GPIOOutput(WorkerThread):
              DeviceConstants.PIN:2,
              DeviceConstants.ACTIVE:Output.HIGH
             },
-        Devices.HEARTBEAT:
+        Devices.HEARTBEAT_1:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x20,
              DeviceConstants.PIN:3,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.HEARTBEAT_2:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x20,
+             DeviceConstants.PIN:4,
              DeviceConstants.ACTIVE:Output.HIGH
             },
 
@@ -127,6 +141,18 @@ class GPIOOutput(WorkerThread):
              DeviceConstants.PIN:2,
              DeviceConstants.ACTIVE:Output.HIGH
             },
+        Devices.AUTO_TOPOFF_PUMP:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:3,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
+        Devices.KALK_STIRRER:
+            {DeviceConstants.BUS:Bus.I2C,
+             DeviceConstants.BUS_ADDRESS:0x21,
+             DeviceConstants.PIN:4,
+             DeviceConstants.ACTIVE:Output.HIGH
+            },
 
         # NC / Power protected devices
         # Set the PIN HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
@@ -136,14 +162,14 @@ class GPIOOutput(WorkerThread):
              DeviceConstants.PIN:8,
              DeviceConstants.ACTIVE:Output.HIGH # Set the Pin HIGH to activate the device (connected to NC terminals - the device is ON when the power is OFF)
             },
+        
+        # NC Devices - Active during safe mode
         Devices.RETURN_PUMP:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x21,
              DeviceConstants.PIN:9,
              DeviceConstants.ACTIVE:Output.HIGH
             },
-
-        # NC Devices - Active during safe mode
         Devices.HEATER_1:
             {DeviceConstants.BUS:Bus.I2C,
              DeviceConstants.BUS_ADDRESS:0x21,
@@ -185,7 +211,7 @@ class GPIOOutput(WorkerThread):
 
     #DEBUG_LEVEL = DebugLevels.ALL
 
-    mcp = {}
+    i2c = None
 
     def dowork(self):
         # We don't actually do anything in our dowork loop. We just wait for gpio requests
@@ -201,10 +227,10 @@ class GPIOOutput(WorkerThread):
         #if message != '':
         #    self.debug("TODO: Bypassed GPIO for {0}: {1} ({2}) - {3}".format(deviceKey, value, module, message), DebugLevels.ALL)
         #    return True
-    
+
         device = self.devices[deviceKey]
         logValue = value
-        if logValue != self.deviceCache[deviceKey]:
+        if logValue != self.deviceCache[deviceKey][DeviceCacheKeys.STATE]:
             if device[DeviceConstants.BUS] == Bus.GPIO:
                 if device[DeviceConstants.ACTIVE] == Output.LOW:
                     value = 1 - value
@@ -212,18 +238,31 @@ class GPIOOutput(WorkerThread):
 
             elif device[DeviceConstants.BUS] == Bus.I2C:
                 self.debug("I2C request: {0} {1}".format(deviceKey, value))
+
+                allowedSwitchTime = self.deviceCache[deviceKey][DeviceCacheKeys.LAST_SWITCH_TIME] + timedelta(0, self.I2C_MIN_SWITCH_TIME)
+                timeToWait = (allowedSwitchTime - datetime.now()).total_seconds()
+                
+                if timeToWait > 0:
+                    self.debug("Device {0} last switched at {1}. Allowed at {2}. Waiting {3}".format(deviceKey, self.deviceCache[deviceKey][DeviceCacheKeys.LAST_SWITCH_TIME], allowedSwitchTime, timeToWait), DebugLevels.SCREEN)
+                    time.sleep(timeToWait)
+
                 if device[DeviceConstants.ACTIVE] == Output.LOW:
                     value = 1 - value
                 busnum = device[DeviceConstants.BUS_ADDRESS]
-                mcp = self.mcp[busnum]
+                #mcp = self.mcp[busnum]
                 self.debug("Setting device {0}: {1}".format(deviceKey, value))
 
                 try:
-                    mcp.output(device[DeviceConstants.PIN], value)
+                    #mcp.output(device[DeviceConstants.PIN], value)
+                    self.i2c.write(busnum, device[DeviceConstants.PIN], value)
+                    
                 except IOError as e:
                     raise GPIOException("Error setting device output {0}: {1} ({2})".format(deviceKey, value, str(e)))
 
-            self.deviceCache[deviceKey] = logValue
+            self.deviceCache[deviceKey] = {
+                           DeviceCacheKeys.STATE:logValue,
+                           DeviceCacheKeys.LAST_SWITCH_TIME:datetime.now()
+                           }
 
             if message != '':
                 logValueText = "ON" if logValue else "OFF"
@@ -243,20 +282,18 @@ class GPIOOutput(WorkerThread):
     def setup(self):
         #self.debug("TODO: Bypassed GPIO setup", DebugLevels.ALL)
         #return
+
+        self.i2c = I2cController()
         
         self.debug("Set up GPIO output")
         GPIO.setmode(GPIO.BCM)
 
         for deviceKey in self.devices:
             device = self.devices[deviceKey]
-
-            #if deviceKey == Devices.STATUS_LED_GREEN or deviceKey == Devices.STATUS_LED_YELLOW or deviceKey == Devices.STATUS_LED_RED or deviceKey == Devices.HEARTBEAT:
-            #    self.debug("Setting up device {0}".format(deviceKey))
-            #else:
-            #    self.debug("Bypassing setup for device {0}".format(deviceKey))
-            #    continue
-
-            self.deviceCache[deviceKey] = 0
+            self.deviceCache[deviceKey] = {
+                DeviceCacheKeys.STATE:0,
+                DeviceCacheKeys.LAST_SWITCH_TIME:datetime.now()
+                }
 
             if device[DeviceConstants.BUS] == Bus.GPIO:
                 GPIO.setup(device[DeviceConstants.PIN], GPIO.OUT)
@@ -265,33 +302,16 @@ class GPIOOutput(WorkerThread):
 
             elif device[DeviceConstants.BUS] == Bus.I2C:
                 busnum = device[DeviceConstants.BUS_ADDRESS]
-                self.debug("{0}: busnum {1}".format(deviceKey, busnum))
-                if not busnum in self.mcp:
-                    self.debug("Creating MCP230XX")
-                    self.mcp[busnum] = MCP230XX(busnum)
-                self.debug("Setting up output pin")
-                self.mcp[busnum].config(device[DeviceConstants.PIN], self.mcp[busnum].OUTPUT)
-                self.debug("Setting pin to {0}".format(1 - device[DeviceConstants.ACTIVE]))
-                self.mcp[busnum].output(device[DeviceConstants.PIN], 1 - device[DeviceConstants.ACTIVE])
+                pinnum = device[DeviceConstants.PIN]
+                self.i2c.setoutput(busnum, pinnum)
+                self.i2c.write(busnum, pinnum, 1 - device[DeviceConstants.ACTIVE])
+                
+            if deviceKey not in Devices.friendlyNames:
+                raise GPIOException("Friendly name not set up for Device {0}".format(deviceKey))
 
-        # Heartbeat Test
-        """
-        mcp1 = self.mcp[0x20]
-        mcp2 = self.mcp[0x21]
-        h = 0
-        for j in range(1, 20):
-            for i in range(8, 16):
-                mcp1.output(i, 1)
-                mcp2.output(self.devices[Devices.HEARTBEAT][DeviceConstants.PIN], h)
-                h = 1-h
-                time.sleep(1)
-
-            for i in range(8, 16):
-                mcp1.output(i, 0)
-                mcp2.output(self.devices[Devices.HEARTBEAT][DeviceConstants.PIN], h)
-                h = 1-h
-                time.sleep(1)
-        """
+        # Sleep to avoid rapid switching of relays
+        self.debug("MCP Setup Complete")
+        time.sleep(1)
             
         return
 

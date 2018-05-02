@@ -4,15 +4,19 @@ import os
 import psutil
 import time
 from datetime import datetime, timedelta
+#from devices.MCP230xx.MCP230xx import MCP230XX
 from workerthread import WorkerThread
 import db as db
 import sensors.DS18B20.temp_sensor as DS18B20
 import sensors.DHT22.read_dht22 as DHT22
-from constants import Statuses, Sensors, MessageCodes, MessageTypes, DebugLevels
+from constants import Statuses, Sensors, MessageCodes, MessageTypes, DebugLevels, WaterLevels
 from customexceptions import SensorException
+
+from i2ccontroller import I2cController
 
 class Settings:
     IDENTIFIER = 'IDENTIFIER'
+    BUS_ADDRESS = 'BUS_ADDRESS'
     MAX = 'MAX'
     MIN = 'MIN'
     RETRIES = 'RETRIES'
@@ -29,6 +33,8 @@ class SensorReader(WorkerThread):
 
     sensorCache = {}
     readFailures = {}
+
+    i2c = None
 
     sensors = {
         Sensors.DISPLAY_TEMP:
@@ -88,7 +94,23 @@ class SensorReader(WorkerThread):
                 Settings.MIN:20,
                 Settings.MAX:100,
                 Settings.RETRIES:3
-            }        
+            },
+        Sensors.WATER_LEVEL_SUMP:
+            {
+                Settings.IDENTIFIER:5, # Pin
+                Settings.BUS_ADDRESS:0x20, # I2C Bus
+                Settings.MIN:0,
+                Settings.MAX:1,
+                Settings.RETRIES:3
+            },
+        Sensors.WATER_LEVEL_AUTO_TOPOFF:
+            {
+                Settings.IDENTIFIER:6, # Pin
+                Settings.BUS_ADDRESS:0x20, # I2C Bus
+                Settings.MIN:0,
+                Settings.MAX:1,
+                Settings.RETRIES:3
+            }
         }
     
     def dowork(self):
@@ -104,7 +126,7 @@ class SensorReader(WorkerThread):
                     raise SensorException("The timeout has already expired reading sensor {0} ({1})".format(request[MessageCodes.SENSOR], request[MessageCodes.WORKER]))
                 
                 value, friendlyValue = self.readsensor(request[MessageCodes.SENSOR], request[MessageCodes.WORKER], request[MessageCodes.TIMEOUT], request[MessageCodes.MAX_AGE])
-                self.logsensor(request[MessageCodes.SENSOR], value, request[MessageCodes.WORKER])
+                self.logsensor(request[MessageCodes.SENSOR], value, request[MessageCodes.WORKER], friendlyValue)
                 queue.put({MessageCodes.CODE:MessageTypes.SENSOR_RESPONSE,
                            MessageCodes.VALUE:value,
                            MessageCodes.FRIENDLY_VALUE:friendlyValue,
@@ -144,25 +166,22 @@ class SensorReader(WorkerThread):
                 self.debug("Attempt {0}: {1}".format(i, sensor))
                 result, value, friendlyValue = self.getcachedsensorreading(sensor, maxAge)
 
-                if result:
-                    self.debug("Got from the cache", DebugLevels.SCREEN)
-                
                 if not result:
                     
                     if sensor == Sensors.DISPLAY_TEMP: 
-                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        value = self.readDS18B20(sensor)
                         friendlyValue = str(round(value, 1)) + "C"
                         
                     elif sensor == Sensors.SUMP_TEMP:
-                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        value = self.readDS18B20(sensor)
                         friendlyValue = str(round(value, 1)) + "C"
 
                     elif sensor == Sensors.DISPLAY_LIGHTING_TEMP:
-                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        value = self.readDS18B20(sensor)
                         friendlyValue = str(round(value, 1)) + "C"
                         
                     elif sensor == Sensors.SUMP_LIGHTING_TEMP:
-                        value = DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+                        value = self.readDS18B20(sensor)
                         friendlyValue = str(round(value, 1)) + "C"
                         
                     elif sensor == Sensors.AMBIENT_TEMP:
@@ -184,6 +203,14 @@ class SensorReader(WorkerThread):
                     elif sensor == Sensors.CPU_TEMP:
                         value = self.getcputemperature()
                         friendlyValue = str(round(value, 1)) + "C"
+
+                    elif sensor == Sensors.WATER_LEVEL_SUMP:
+                        value = self.readswitch(sensor)
+                        friendlyValue = WaterLevels.friendlyNames[value]
+
+                    elif sensor == Sensors.WATER_LEVEL_AUTO_TOPOFF:
+                        value = self.readswitch(sensor)
+                        friendlyValue = WaterLevels.friendlyNames[value]
                         
                     else:
                         raise SensorException("Invalid sensor request (" + sensor + ")")
@@ -242,6 +269,12 @@ class SensorReader(WorkerThread):
         elif maximum != None and value > maximum:
             raise SensorException("Out of range exception (max) for " + sensor + " (" + str(value) + ")")
 
+    def readDS18B20(self, sensor):
+        try:
+            return DS18B20.read_temp(self.sensors[sensor][Settings.IDENTIFIER])
+        except Exception as e:
+            raise SensorException(str(e))
+    
     def readDHT22(self, sensor, maxAge):
         result = False
         reading = DHT22.readsensor()
@@ -278,8 +311,17 @@ class SensorReader(WorkerThread):
         # We now have automatic reboot functionality built into reefx if a worker thread becomes unresponsive.
         res = os.popen('vcgencmd measure_temp').readline()
         return float(res.replace("temp=","").replace("'C\n",""))  
+
+    def readswitch(self, sensor):
+        return self.i2c.read(self.sensors[sensor][Settings.BUS_ADDRESS], self.sensors[sensor][Settings.IDENTIFIER])
     
     def setup(self):
+        self.i2c = I2cController()
+        
+        for sensorKey, sensor in self.sensors.iteritems():
+            if sensorKey not in Sensors.friendlyNames:
+                raise SensorException("Friendly name not set up for Sensor {0}".format(sensorKey))
+
         DS18B20.init()
 
     def teardown(self, message):

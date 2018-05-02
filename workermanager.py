@@ -2,19 +2,20 @@
 
 from datetime import datetime
 import threading
+import traceback
 import Queue
 from constants import MessageCodes
 from constants import MessageTypes
 from constants import Statuses
 
-class WorkerManager():
+class WorkerManager(object):
     lastLoggedStatus = None
     lastLoggedStatusMessage = ''
     statusMessage = ''
 
     sensorQueue = None
     gpioOutputQueue = None
-    
+
     def __init__(self, name, outQueue):
         self.statusTime = datetime.now()
         self.queue = Queue.Queue()
@@ -22,6 +23,7 @@ class WorkerManager():
         self.name = self.worker.__class__.__name__
         self.friendlyName = self.worker.friendlyname()
         self.handlesRequests = self.worker.HANDLES_REQUESTS
+        self.program = ''
 
     def start(self, sensorQueue = None, gpioOutputQueue = None):
         self.worker.sensorQueue = sensorQueue

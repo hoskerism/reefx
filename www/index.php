@@ -93,16 +93,35 @@
 	if (!empty($capabilities['INFORMATION']))
 	{
 		echo '<div class="data-heading2">Information</div>';
-		echo '<div class="data-content2">';	
-		echo '<ul class="columnar">';
 		
-		foreach ($capabilities['INFORMATION'] as $reading)
+		$items_to_display = count($capabilities['INFORMATION']);
+		
+		if (isset($capabilities['INFORMATION']['Information']))
 		{
-			echo '<li>' . $reading['NAME'] . ": " . $reading['VALUE'] . '</li>';
+			$items_to_display -= 1;
+			echo '<div class="data-content2">';
+			echo '<ul class="full-width">';
+			echo '<li>' . str_replace("\r\n", "<br/>", $capabilities['INFORMATION']['Information']['VALUE']) . '</li>';
+			echo '</ul>';
+			echo '</div>';
 		}
 		
-		echo '</ul>';
-		echo '</div>';
+		if ($items_to_display >= 1)
+		{
+			echo '<div class="data-content2">';	
+			echo '<ul class="columnar">';
+			
+			foreach ($capabilities['INFORMATION'] as $key => $reading)
+			{
+				if ($key != 'Information')
+				{
+					echo '<li>' . $reading['NAME'] . ": " . $reading['VALUE'] . '</li>';
+				}
+			}
+			
+			echo '</ul>';
+			echo '</div>';
+		}
 	}
 	
 	if (!empty($capabilities['SENSOR_READINGS']))

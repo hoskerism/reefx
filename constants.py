@@ -17,7 +17,8 @@ class Devices():
     STATUS_LED_RED = 'STATUS_LED_RED'
     STATUS_LED_YELLOW = 'STATUS_LED_YELLOW'
     STATUS_LED_GREEN = 'STATUS_LED_GREEN'
-    HEARTBEAT = 'HEARTBEAT'
+    HEARTBEAT_1 = 'HEARTBEAT_1'
+    HEARTBEAT_2 = 'HEARTBEAT_2'
     HEATER_1 = 'HEATER_1'
     HEATER_2 = 'HEATER_2'
     FAN_DISPLAY = 'FAN_DISPLAY'
@@ -35,11 +36,14 @@ class Devices():
     FAN_LIGHTING_SUMP = 'FAN_LIGHTING_SUMP'
     PROTEIN_SKIMMER = 'PROTEIN_SKIMMER'
     RETURN_PUMP = 'RETURN_PUMP'
+    AUTO_TOPOFF_PUMP = 'AUTO_TOPOFF_PUMP'
+    KALK_STIRRER = 'KALK_STIRRER'
 
     friendlyNames = {STATUS_LED_RED: 'Red Status LED',
                      STATUS_LED_YELLOW: 'Yellow Status LED',
                      STATUS_LED_GREEN: 'Green Status LED',
-                     HEARTBEAT: 'Heartbeat',
+                     HEARTBEAT_1: 'Heartbeat 1',
+                     HEARTBEAT_2: 'Heartbeat 2',
                      HEATER_1: 'Heater 1',
                      HEATER_2: 'Heater 2',
                      FAN_DISPLAY: 'Display Fan',
@@ -56,9 +60,12 @@ class Devices():
                      FAN_LIGHTING_SUMP: 'Refugium Lighting Fans',
                      SUMP_LIGHTING: 'Refugium Lights',
                      PROTEIN_SKIMMER: 'Protein Skimmer',
-                     RETURN_PUMP: 'Return Pump'}
+                     RETURN_PUMP: 'Return Pump',
+                     AUTO_TOPOFF_PUMP: 'Auto-topoff Pump',
+                     KALK_STIRRER: 'Kalk Stirrer'}
 
 class MessageTypes():
+    BROADCAST_REQUEST = 'BROADCAST_REQUEST'
     CAPABILITIES_REQUEST = 'CAPABILITIES_REQUEST'
     CAPABILITIES_RESPONSE = 'CAPABILITIES_RESPONSE'
     DEVICE_OUTPUT = 'DEVICE_OUTPUT'
@@ -72,6 +79,7 @@ class MessageTypes():
     PROGRAM_REQUEST = 'PROGRAM_REQUEST'
     PROGRAM_RESPONSE = 'PROGRAM_RESPONSE'
     REBOOT_REQUEST = 'REBOOT_REQUEST'
+    RESUME_DEFAULT_PROGRAM_REQUEST = 'RESUME_DEFAULT_PROGRAM_REQUEST'
     SAFE_MODE = 'SAFE_MODE'
     SENSOR_REQUEST = 'SENSOR_REQUEST'
     SENSOR_RESPONSE = 'SENSOR_RESPONSE'
@@ -93,6 +101,7 @@ class MessageCodes():
     IP_ADDRESS = 'IP_ADDRESS'
     MAX_AGE = 'MAX_AGE'
     MESSAGE = 'MESSAGE'
+    PROGRAM = 'PROGRAM'
     PROGRAMS = 'PROGRAMS'
     RESPONSE_QUEUE = 'RESPONSE_QUEUE'
     SENSOR = 'SENSOR'
@@ -116,6 +125,8 @@ class Sensors():
     DISK_SPACE = 'DISK_SPACE'
     AVAILABLE_MEMORY = 'AVAILABLE_MEMORY'
     CPU_TEMP = 'CPU_TEMP'
+    WATER_LEVEL_SUMP = 'WATER_LEVEL_SUMP'
+    WATER_LEVEL_AUTO_TOPOFF = 'WATER_LEVEL_AUTO_TOPOFF'
 
     friendlyNames = {DISPLAY_TEMP:"Display Temp",
                      SUMP_TEMP:"Refugium Temp",
@@ -125,7 +136,9 @@ class Sensors():
                      AMBIENT_HUMIDITY:"Ambient Humidity",
                      DISK_SPACE:"Disk Space",
                      AVAILABLE_MEMORY:"Available Memory",
-                     CPU_TEMP:"CPU Temp"}
+                     CPU_TEMP:"CPU Temp",
+                     WATER_LEVEL_SUMP:"Sump Water Level",
+                     WATER_LEVEL_AUTO_TOPOFF:"Auto-topoff Water Level"}
 
 class DebugLevels():
     NONE = 0
@@ -140,4 +153,23 @@ class EventLevels():
     WARNING = 3
     ALERT = 4
     EXCEPTION = 5
-	
+
+class WaterLevels():
+    OK = 0
+    LOW = 1
+
+    friendlyNames = {OK:"OK",
+                     LOW:"Low"}
+
+class ProgramCodes():
+    PROGRAM_ID = 'program_id'
+    CODE = 'code'
+    NAME = 'name'
+    RELATIVE_TIMES = 'relative_times'
+    REPEAT_PROGRAM = 'repeat_program'
+    DEFAULT_PROGRAM = 'default_program'
+    SELECTED = 'selected'
+    START_TIME = 'start_time'
+    MESSAGE = 'message'
+    
+    

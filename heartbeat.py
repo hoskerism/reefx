@@ -3,11 +3,11 @@
 from datetime import datetime, timedelta
 import time
 
-from constants import Statuses, Devices, MessageTypes, MessageCodes, DebugLevels
+from constants import ProgramCodes, Statuses, Devices, MessageTypes, MessageCodes, DebugLevels
 from programrunner import ProgramRunner
 from workerthread import WorkerThread
 
-class Heartbeat(ProgramRunner):
+class Heartbeat(WorkerThread):
 
     FRIENDLY_NAME = "Heartbeat"
     RUNTIME = 75
@@ -41,8 +41,7 @@ class Heartbeat(ProgramRunner):
         
         endtime = datetime.now() + timedelta(seconds=sleepTime)
 
-        heartbeatMode = self.program['code']
-        pinHighForTesting = False
+        heartbeatMode = self.program[ProgramCodes.CODE]
         previousHeartbeatStatus = self.heartbeatStatus
         
         if heartbeatMode == 'NORMAL':
@@ -78,11 +77,6 @@ class Heartbeat(ProgramRunner):
         elif heartbeatMode == 'OVERRIDE_ON':
             self.setstatus(Statuses.WARNING, 'Heartbeat active by request')
             self.heartbeatStatus = True
-            
-        elif heartbeatMode == 'PIN_HIGH':
-            self.setstatus(Statuses.WARNING, 'Safe Mode Pin High Testing')
-            self.heartbeatStatus = False
-            pinHighForTesting = True
 
         heartbeatText = "On" if self.heartbeatStatus else "Off"
 
@@ -138,16 +132,25 @@ class Heartbeat(ProgramRunner):
             # Note: we use time.sleep, rather than self.sleep as we don't want to be interrupted
             # in the middle of a flash cycle (it makes the LED flashing look messy)
             
-            self.deviceoutput(Devices.HEARTBEAT, False or pinHighForTesting, requireResponse=False)
-            self.showleds(statusLEDs, True)
-            
-            time.sleep(1)
+            self.deviceoutput(Devices.HEARTBEAT_2, False, requireResponse=False)
+            self.deviceoutput(Devices.HEARTBEAT_1, self.heartbeatStatus, requireResponse=False)
 
-            self.deviceoutput(Devices.HEARTBEAT, self.heartbeatStatus or pinHighForTesting, requireResponse=False)
+            self.showleds(statusLEDs, True)
+
+            time.sleep(0.75)
+
+            self.deviceoutput(Devices.HEARTBEAT_1, False, requireResponse=False)
+            self.deviceoutput(Devices.HEARTBEAT_2, self.heartbeatStatus, requireResponse=False)
+            
+            time.sleep(0.25)
+
             if self.systemStatus != Statuses.CRITICAL:
                 self.showleds(statusLEDs, False)
                 
             time.sleep(0.5)
+
+            self.deviceoutput(Devices.HEARTBEAT_1, False, requireResponse=False)
+            self.deviceoutput(Devices.HEARTBEAT_2, False, requireResponse=False)
             
             # Now call self.sleep to catch any pending requests
             self.sleep(0)
@@ -170,3 +173,9 @@ class Heartbeat(ProgramRunner):
     def teardown(self, message):
         self.debug("Turning off LEDs: {0}".format(message))
         self.showleds([Devices.STATUS_LED_GREEN, Devices.STATUS_LED_YELLOW, Devices.STATUS_LED_RED], False)
+        self.deviceoutput(Devices.HEARTBEAT_1, False, requireResponse=False)
+        self.deviceoutput(Devices.HEARTBEAT_2, False, requireResponse=False)
+
+    def setup(self):
+        pass
+            

@@ -62,7 +62,12 @@ class ReefXBase(threading.Thread):
 		
     def debug(self, message, debugLevel = DebugLevels.NONE):
         self.logevent(EventLevels.DEBUG, "DEBUG", message, debugLevel)
-            
+
+    def traceback(self):
+        self.printline("Traceback")
+        for line in traceback.format_stack():
+            print line.strip()
+                
     def logaudit(self, eventCode, message, additional=''):
         self.logevent(EventLevels.AUDIT, eventCode, message, additional=additional)
 

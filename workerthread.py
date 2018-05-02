@@ -9,7 +9,7 @@ import time
 import db
 import constants
 import functions
-from constants import Devices, MessageCodes, MessageTypes, Statuses, DebugLevels
+from constants import Devices, MessageCodes, MessageTypes, ProgramCodes, Statuses, DebugLevels
 from customexceptions import SensorException
 from workerbase import WorkerBase
 
@@ -41,6 +41,41 @@ class WorkerThread(WorkerBase):
             return True
         elif request[MessageCodes.CODE] == MessageTypes.STATUS_REQUEST:
             return self.processstatusrequest()
+        elif request[MessageCodes.CODE] == MessageTypes.BROADCAST_REQUEST:
+            # Don't process the request if we made it ourself
+            if request[MessageCodes.WORKER] != self.name():
+                return self.processbroadcastrequest(request)
+            else:
+                return True
+
+        elif request[MessageCodes.CODE] == MessageTypes.PROGRAM_REQUEST:
+            self.debug("Processing Program request {0}".format(request))
+            program = request[MessageCodes.VALUE]
+            responseQueue = request[MessageCodes.RESPONSE_QUEUE]
+
+            if MessageCodes.USERNAME in request:
+                requestor = request[MessageCodes.USERNAME]
+                self.loginformation("Program request", "Program {0} requested by {1} ({2} / {3})".format(program, request[MessageCodes.CALLER], request[MessageCodes.IP_ADDRESS], requestor))
+                result = self.setprogram(program)
+
+                if self.program[ProgramCodes.REPEAT_PROGRAM] == 1:
+                    self.programStack = []
+                    
+                self.respond(responseQueue, result)
+
+            else:
+                logMessage = "Invalid PROGRAM_REQUEST received: {0}".format(request);
+                self.setstatus(Statuses.ALERT, logMessage)
+                self.logalert(logMessage)
+                
+            return True
+        
+        elif request[MessageCodes.CODE] == MessageTypes.RESUME_DEFAULT_PROGRAM_REQUEST:
+            if self.program and self.program[ProgramCodes.CODE] == request[MessageCodes.VALUE]:
+                self.logaudit("Default Program Request", "{0} requested by {1}".format(request[MessageCodes.CODE], request[MessageCodes.WORKER]))
+                self.setdefaultprogram()
+                
+            return True
         elif request[MessageCodes.CODE] == MessageTypes.SAFE_MODE:
             self.debug("Received Safe Mode request {0}".format(request[MessageCodes.VALUE]))
             self.safeMode = request[MessageCodes.VALUE]
@@ -53,26 +88,48 @@ class WorkerThread(WorkerBase):
                     self.setup()
                     self.showstatus()
                     
-            result = True
+            return True
         else:
             return super(WorkerThread, self).processrequestcore(request)
-
+        
     def processstatusrequest(self):
         self.debug("Returning status: {0}".format(self.status))
+
+        program = self.program[ProgramCodes.CODE] if self.program else ''
+        
         self.outQueue.put({
                 MessageCodes.CODE:MessageTypes.STATUS_RESPONSE,
                 MessageCodes.TIME:datetime.now(),
                 MessageCodes.WORKER:self.name(),
                 MessageCodes.STATUS:self.status,
-                MessageCodes.MESSAGE:self.statusMessage
+                MessageCodes.MESSAGE:self.statusMessage,
+                MessageCodes.PROGRAM:self.program
                 })
         return True;
 
+    def processbroadcastrequest(self, request):
+        sql = """SELECT program_id
+                         FROM programs
+                         WHERE module = {0}
+                         AND code = {1}""".format(db.dbstr(self.name()), db.dbstr(request[MessageCodes.VALUE]))
+        if db.read(sql, 0, 1):
+            if self.program[ProgramCodes.REPEAT_PROGRAM] == 0:
+                self.programStack.append(self.program)
+                
+            self.setprogram(request[MessageCodes.VALUE], request[MessageCodes.MESSAGE])
+            self.loginformation("Program request", "Program {0} requested by {1}.".format(request[MessageCodes.VALUE], request[MessageCodes.WORKER]))
+
+        return True;
+
+    def respond(self, responseQueue, success):
+        if responseQueue != None:
+            responseQueue.put({MessageCodes.CODE:MessageTypes.PROGRAM_RESPONSE,
+                               MessageCodes.VALUE:success})
+            
     def sendstatusresponse(self):
         return self.processstatusrequest()
-    
-    # TODO: What to do with errors here?
-    def readsensor(self, sensor, maxAge=60):
+
+    def readsensor(self, sensor, maxAge=55):
         timeout = 20
         responseQueue = Queue.Queue()
         self.sensorQueue.put({
@@ -84,11 +141,8 @@ class WorkerThread(WorkerBase):
             MessageCodes.RESPONSE_QUEUE:responseQueue
             })
 
-        try:
-            response = responseQueue.get(True, timeout)
-        except Queue.Empty as e:
-            raise SensorException("Exception reading sensor {0}. Timeout expired".format(sensor))
-
+        response = self.readsensorresponse(responseQueue, timeout)
+        
         if response[MessageCodes.CODE] == MessageTypes.EXCEPTION:
             raise response[MessageCodes.VALUE]
 
@@ -96,14 +150,23 @@ class WorkerThread(WorkerBase):
                                        MessageCodes.FRIENDLY_VALUE:response[MessageCodes.FRIENDLY_VALUE],
                                        MessageCodes.FRIENDLY_NAME:response[MessageCodes.FRIENDLY_NAME]}
 
-        responseQueue.task_done()
-        
         return response[MessageCodes.VALUE]
+
+    def readsensorresponse(self, responseQueue, timeout):
+        try:
+            response = responseQueue.get(True, timeout)
+            responseQueue.task_done()
+        except Queue.Empty as e:
+            raise SensorException("Exception reading sensor {0}. Timeout expired".format(sensor))
+
+        return response
     
-    def logsensor(self, sensor, value, module = ''):
+    def logsensor(self, sensor, value, module = '', friendlyValue = ''):
         if module == '':
             module = self.name()
-        self.printline("{0}: {1} ({2})".format(sensor, value, module))
+        if friendlyValue == '':
+            friendlyValue == value
+        self.printline("{0}: {1} ({2})".format(sensor, friendlyValue, module))
         db.logsensor(module, sensor, value)
 
     def deviceoutput(self, device, value, logMessage = '', requireResponse = True):
@@ -134,9 +197,8 @@ class WorkerThread(WorkerBase):
             })
 
         if responseQueue:
-            response = responseQueue.get(True, 30)
-            self.debug("Device output received response: {0}".format(response[MessageCodes.VALUE]))
-
+            response = self.getdeviceoutputresponse(responseQueue, 30)
+            
             try:
                 self.deviceStatuses[device] = {
                     MessageCodes.VALUE: value,
@@ -145,32 +207,26 @@ class WorkerThread(WorkerBase):
             except KeyError as e:
                 self.logwarning("Friendly name error", "Friendly name not configured for device: {0}".format(device))
 
-            responseQueue.task_done()
-
             return response[MessageCodes.VALUE]
 
         return
-        
-    def requestprogram(self, worker, program):
-        self.logaudit("Program request", "Requesting program {0} from worker {1}".format(program, worker))
-        
-        responseQueue = Queue.Queue()
-        
-        self.outQueue.put({
-            MessageCodes.CODE:MessageTypes.PROGRAM_REQUEST,
-            MessageCodes.WORKER:worker,
-            MessageCodes.CALLER:self.name(),
-            MessageCodes.VALUE:program,
-            MessageCodes.IP_ADDRESS:'localhost',
-            MessageCodes.RESPONSE_QUEUE:responseQueue
-            })
-            
-        response = responseQueue.get(True, 30)
-        self.debug("Request Program received response: {0}".format(response[MessageCodes.VALUE]))
+
+    def getdeviceoutputresponse(self, responseQueue, timeout):
+        response = responseQueue.get(True, timeout)
         responseQueue.task_done()
-        
-        return response[MessageCodes.VALUE]
-        
+        self.debug("Device output received response: {0}".format(response[MessageCodes.VALUE]))
+
+        return response
+
+    def broadcastrequest(self, requestCode, requestText):
+        self.logaudit("Broadcast request", "{0}: {1}".format(requestCode, requestText))
+
+        self.outQueue.put({
+            MessageCodes.CODE:MessageTypes.BROADCAST_REQUEST,
+            MessageCodes.WORKER:self.name(),
+            MessageCodes.VALUE:requestCode,
+            MessageCodes.MESSAGE:requestText})
+
     def rebootrequest(self, message):
         self.outQueue.put({
             MessageCodes.CODE:MessageTypes.REBOOT_REQUEST,

@@ -9,7 +9,7 @@ import datetime
 import time
 import db
 from reefxbase import ReefXBase
-from constants import MessageCodes, MessageTypes, Statuses, DebugLevels
+from constants import MessageCodes, MessageTypes, ProgramCodes, Statuses, DebugLevels
 
 class WorkerBase(ReefXBase):
     __metaclass__ = abc.ABCMeta
@@ -32,17 +32,23 @@ class WorkerBase(ReefXBase):
     sensorReadings = None
     deviceStatuses = None
     information = None
+    program = {}
 
+    programStack = []
+    
     workingStatus = Statuses.UNDEFINED
-    workeringStatusMessage = ""
+    workingStatusMessage = ""
 
     def run(self):
         self.setup()
+        self.setdefaultprogram()
+        
         while not self.stoprequest:
             try:
                 self.starttime = datetime.datetime.now()
                 self.looprequest = False
                 self.resetstatus()
+                self.information = {}
 
                 if self.safeMode and not self.OVERRIDE_SAFE_MODE:
                     self.debug("Setting Status for Safe Mode Engaged")
@@ -64,15 +70,18 @@ class WorkerBase(ReefXBase):
                 # TODO; we should also run any cleanup code
                 
                 self.sleep(self.EXCEPTION_TIMEOUT)
-                
+
         self.teardown("System Shutdown")
         self.debug("Exiting")
         return
 
     def sleep(self, value=None):
         ''' value can be a number of seconds or a datetime. If it is None then sleeps until next runtime '''
+
+        self.debug("Sleeping {0}".format(value))
+        
         try:
-            if self.stoprequest:
+            if self.stoprequest or self.looprequest:
                 return
 
             if type(value) is datetime.datetime:
@@ -83,6 +92,7 @@ class WorkerBase(ReefXBase):
                 endtime = datetime.datetime.combine(value, datetime.time())
             elif type(value) is int:
                 endtime = datetime.datetime.now() + datetime.timedelta(seconds=value)
+                self.debug("Adding {0} seconds gives endtime = {1}".format(value, endtime))
             else:
                 endtime = self.starttime + datetime.timedelta(seconds=self.RUNTIME)
                 
@@ -144,15 +154,88 @@ class WorkerBase(ReefXBase):
         if self.deviceStatuses != None:
             output[MessageCodes.DEVICE_STATUSES] = self.deviceStatuses
             
-        if programs != None:
+        if programs != None and programs:
             output[MessageCodes.PROGRAMS] = programs
             
         request[MessageCodes.RESPONSE_QUEUE].put(output)
 
         return True
-        
+
     def getprograms(self):
-        return {}
+        programID = self.program[ProgramCodes.PROGRAM_ID] if self.program else 0
+        
+        sql = """SELECT program_id, code, name, 0 AS running
+                FROM programs
+                WHERE module = {0}
+                AND (show_in_list = 1 OR program_id = {1})
+                ORDER BY default_program DESC, name""".format(db.dbstr(self.name()), db.dbstr(programID))
+                
+        programs = db.read(sql)
+
+        for program in programs:
+            if program['program_id'] == programID:
+                program['running'] = 1
+        
+        return programs
+
+    def setprogram(self, program, message = ""):
+        sql = """SELECT program_id, code, name, relative_times, repeat_program, default_program, selected
+                         FROM programs
+                         WHERE module = {0}
+                         AND code = {1}""".format(db.dbstr(self.name()), db.dbstr(program))
+
+        programs = db.read(sql, 0, 1)
+
+        self.program = {
+            ProgramCodes.PROGRAM_ID:programs[0]['program_id'],
+            ProgramCodes.CODE:programs[0]['code'],
+            ProgramCodes.NAME:programs[0]['name'],
+            ProgramCodes.RELATIVE_TIMES:programs[0]['relative_times'],
+            ProgramCodes.REPEAT_PROGRAM:programs[0]['repeat_program'],
+            ProgramCodes.DEFAULT_PROGRAM:programs[0]['default_program'],
+            ProgramCodes.SELECTED:programs[0]['selected'],
+            ProgramCodes.START_TIME:datetime.datetime.now(),
+            ProgramCodes.MESSAGE:message
+            }
+    
+        if self.program[ProgramCodes.REPEAT_PROGRAM]:
+            self.debug("Setting program {0} as selected program".format(self.program[ProgramCodes.CODE]))
+            db.write("UPDATE programs SET selected = 0 WHERE module = {0} AND selected = 1".format(db.dbstr(self.name())))
+            db.write("UPDATE programs SET selected = 1 WHERE program_id = {0}".format(self.program[ProgramCodes.PROGRAM_ID]))
+        
+        self.onprogramchanged()
+
+        return True
+    
+    def setdefaultprogram(self):
+        sql = """SELECT program_id, code, name, relative_times, repeat_program, default_program, selected
+                 FROM programs
+                 WHERE module = {0}
+                 AND (default_program = 1 OR selected = 1)
+                 ORDER BY selected DESC, default_program DESC""".format(db.dbstr(self.name()))
+        programs = db.read(sql, 0, 1)
+
+        if not programs:
+            self.program = {}
+        else:
+            self.program = {
+                ProgramCodes.PROGRAM_ID:programs[0]['program_id'],
+                ProgramCodes.CODE:programs[0]['code'],
+                ProgramCodes.NAME:programs[0]['name'],
+                ProgramCodes.RELATIVE_TIMES:programs[0]['relative_times'],
+                ProgramCodes.REPEAT_PROGRAM:programs[0]['repeat_program'],
+                ProgramCodes.DEFAULT_PROGRAM:programs[0]['default_program'],
+                ProgramCodes.SELECTED:programs[0]['selected'],
+                ProgramCodes.START_TIME:datetime.datetime.now(),
+                ProgramCodes.MESSAGE:""
+                }
+
+        self.onprogramchanged()
+
+        return True
+
+    def onprogramchanged(self):
+        pass
         
     def processrequest(self, request):
         """Override this method to implement class specific message processing.
@@ -165,9 +248,14 @@ class WorkerBase(ReefXBase):
         self.debug("Reset Status")
         self.workingStatus = Statuses.OK
         self.workingStatusMessage = ""
+        self.information = {}
     
-    def setstatus(self, newStatus, newMessage = ''):
+    def setstatus(self, newStatus, newMessage = '', resetMessage = False):
         self.debug("setstatus: {0}, {1}".format(newStatus, newMessage))
+
+        if resetMessage:
+            self.workingStatusMessage = ""
+        
         if newStatus > self.workingStatus:
             self.workingStatus = newStatus
             
@@ -184,7 +272,7 @@ class WorkerBase(ReefXBase):
     def showstatus(self):
         self.debug("showstatus {0}".format(self.workingStatus))
 
-        sendStatusResponse = True if self.workingStatus > self.status else False
+        sendStatusResponse = True if self.workingStatus > self.status or self.status == Statuses.UNDEFINED or self.workingStatusMessage != self.statusMessage else False
         
         self.status = self.workingStatus
         self.statusMessage = self.workingStatusMessage

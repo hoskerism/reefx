@@ -1,36 +1,23 @@
 #!/user/bin/python
 
-from programrunner import ProgramRunner
+from lightingcontroller import LightingController
 from constants import MessageCodes, Statuses, Sensors, DebugLevels, Devices
 from customexceptions import SensorException
 
-class SumpLightingController(ProgramRunner):
-
-    RUNTIME = 300
+class SumpLightingController(LightingController):
     FRIENDLY_NAME = "Refugium Lighting Controller"
+    HEATSINK_SENSOR = Sensors.SUMP_LIGHTING_TEMP
+    HEATSINK_FAN = Devices.FAN_LIGHTING_SUMP
 
     def teardown(self, message):
         self.deviceoutput(Devices.SUMP_LIGHTING, 1, message)
         self.deviceoutput(Devices.FAN_LIGHTING_SUMP, 1, message)
 
-    def runscheduledtasks(self):
-        self.debug("Checking lighting heatsink temperature")
+    def islightingon(self):
+        # Devices are on by default so if they're not in the dictionary then they're on
+        return Devices.SUMP_LIGHTING not in self.deviceStatuses or self.deviceStatuses[Devices.SUMP_LIGHTING][MessageCodes.VALUE]
 
-        lightingOn = self.deviceStatuses[Devices.SUMP_LIGHTING][MessageCodes.VALUE] == 1
-        
-        if lightingOn:
-            try:
-                heatsinkTemp = self.readsensor(Sensors.SUMP_LIGHTING_TEMP)
-                fanOn = heatsinkTemp > 50
-                self.deviceoutput(Devices.FAN_LIGHTING_SUMP, fanOn, "Setting fan {0} as heatsink temp = {1}".format(fanOn, heatsinkTemp))
+    def isfanon(self):
+        # Devices are on by default so if they're not in the dictionary then they're on
+        return Devices.FAN_LIGHTING_SUMP not in self.deviceStatuses or self.deviceStatuses[Devices.FAN_LIGHTING_SUMP][MessageCodes.VALUE]
 
-                # TODO: If heatsinkTemp > 60 then cut the lights
-
-            except SensorException as e:
-                message = "Could not get Sump Lighting Heatsink Temp"
-                self.setstatus(Statuses.WARNING, message)
-                self.deviceoutput(Devices.FAN_LIGHTING_SUMP, 1, "Setting Fan on as lighting is {0}".format(lightingOn))
-
-        else:
-            self.deviceoutput(Devices.FAN_LIGHTING_SUMP, 0, "Fans off as lighting is off")
-        

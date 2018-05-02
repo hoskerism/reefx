@@ -1,8 +1,8 @@
 import os
 import glob
 import time
+from customexceptions import SensorException
 
-#TODO: I wonder if we need to call this on all threads?
 def init():
     os.system('modprobe w1-gpio')
     os.system('modprobe w1-therm')
@@ -15,20 +15,24 @@ def _read_temp_raw(serial):
     return lines
 
 def read_temp(serial):
-    lines = _read_temp_raw(serial)
-    counter = 0
-    while lines[0].strip()[-3:] != 'YES':
-        counter += 1
-        if counter > 10:
-            raise Exception("DS18B20 sensor retry count exceeded " + serial +
-                            " sensor reads: " + str(lines))
-        time.sleep(0.2)
+    try:
         lines = _read_temp_raw(serial)
-    equals_pos = lines[1].find('t=')
-    if equals_pos != -1:
-        temp_string = lines[1][equals_pos+2:]
-        temp_c = float(temp_string) / 1000.0
-        return temp_c
-    else:
-        raise Exception("DS18B20 sensor read error for serial " + serial +
-                        " sensor reads: " + str(lines))
+        counter = 0
+        while lines[0].strip()[-3:] != 'YES':
+            counter += 1
+            if counter > 10:
+                raise Exception("DS18B20 sensor retry count exceeded " + serial +
+                                " sensor reads: " + str(lines))
+            time.sleep(0.2)
+            lines = _read_temp_raw(serial)
+        equals_pos = lines[1].find('t=')
+        if equals_pos != -1:
+            temp_string = lines[1][equals_pos+2:]
+            temp_c = float(temp_string) / 1000.0
+            return temp_c
+        else:
+            raise SensorException("DS18B20 sensor read error for serial " + serial +
+                            " sensor reads: " + str(lines))
+
+    except Exception as e:
+        raise SensorException(e)

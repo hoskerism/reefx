@@ -2,7 +2,7 @@
 
 from workerthread import WorkerThread
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as timebase
 import db
 from constants import Statuses, Sensors, Devices, DebugLevels, MessageCodes
 from customexceptions import SensorException
@@ -44,6 +44,8 @@ class TemperatureController(WorkerThread):
             self.logwarning("Display Temp Exception", message)
             self.displayTemp = self.readsensor(Sensors.SUMP_TEMP)
 
+        self.sleep(0)
+
         try:
             self.sumpTemp = self.readsensor(Sensors.SUMP_TEMP)
         except SensorException as e:
@@ -51,6 +53,8 @@ class TemperatureController(WorkerThread):
             self.setstatus(Statuses.WARNING, message)
             self.logwarning("Sump Temp Exception", message)
             self.sumpTemp = self.readsensor(Sensors.DISPLAY_TEMP)
+
+        self.sleep(0)
 
         try:
             self.ambientTemp = self.readsensor(Sensors.AMBIENT_TEMP)
@@ -60,6 +64,8 @@ class TemperatureController(WorkerThread):
             self.logwarning("Ambient Temp Exception", message)
             self.ambientTemp = self.displayTemp
 
+        self.sleep(0)
+
         try:
             self.ambientHumidity = self.readsensor(Sensors.AMBIENT_HUMIDITY)
         except SensorException as e:
@@ -68,9 +74,8 @@ class TemperatureController(WorkerThread):
             self.logwarning("Ambient Humidity Exception", message)
             self.ambientHumidity = 50
 
-        # TODO: Validate the temperature. It shouldn't differ from the previous reading
-        # by more than 0.5 degrees. If it does, read it again.
-
+        self.sleep(0)
+        
         # Add it to the list
         self.temp_history.append({'sensor':Sensors.DISPLAY_TEMP, 'value':self.displayTemp, 'date':datetime.now()})
 
@@ -101,6 +106,11 @@ class TemperatureController(WorkerThread):
                 self.lastLoggedMessage = self.heatingMessage
 
             self.switchdevices()
+
+            self.information['Information'] = {
+                MessageCodes.NAME:"Info",
+                MessageCodes.VALUE:self.heatingMessage
+                }
 
     def checkrange(self):
         if self.displayTemp > 29.5:
@@ -237,6 +247,12 @@ class TemperatureController(WorkerThread):
             self.setlevel(2, "Ambient temperature adjustment ({0}:{1})".format(round(self.ambientTemp, 1), round(self.displayTemp, 1)))
         elif self.heatingLevel < 0 and self.displayTemp - self.ambientTemp > 2:
             self.setlevel(1, "Ambient temperature adjustment ({0}:{1})".format(round(self.ambientTemp, 1), round(self.displayTemp, 1)))
+        elif self.ambientTemp > 35 or (self.ambientTemp > 34 and timebase.hour < 11) or (self.ambientTemp > 33 and timebase.hour < 9):
+            self.setlevel(-3, "Extreme ambient temperature detected ({0})".format(round(self.ambientTemp, 1)))
+        elif self.ambientTemp > 32 or (self.ambientTemp > 31 and timebase.hour < 11) or (self.ambientTemp > 30 and timebase.hour < 9):
+            self.setlevel(-2, "High ambient temperature detected ({0})".format(round(self.ambientTemp, 1)))
+        elif self.ambientTemp > 29 or (self.ambientTemp > 28 and timebase.hour < 11) or (self.ambientTemp > 27 and timebase.hour < 9):
+            self.setlevel(-1, "High ambient temperature detected ({0})".format(round(self.ambientTemp, 1)))
 
     def switchdevices(self):
         heater1Request = 0
@@ -288,11 +304,14 @@ class TemperatureController(WorkerThread):
             self.debug("Sump Fan: {0}".format(fanSumpRequest))
             self.deviceoutput(Devices.FAN_SUMP, fanSumpRequest, logMessage=self.heatingMessage)
             
-        if self.heatingLevel < -1:
-            self.loginformation("Overtemp", "Requesting lights out")
-            self.requestprogram('DisplayLightingController', 'OFF_ONE_HOUR')
-            self.requestprogram('SumpLightingController', 'OFF_ONE_HOUR')
-            self.requestprogram('Wavemaker', 'QUIET_ONE_HOUR') # Quiet mode turns all pumps but one off, so will add less heat to the water
+        if self.heatingLevel < -2:
+            self.loginformation("Overtemp", "Broadcasting OVERTEMP message")
+            self.broadcastrequest("OVERTEMP", 'Aquarium maximum temperature exceeded.')
+            
+            self.heatingMessage += "\r\nAquarium maximum temperature exceeded."
+
+        if self.heatingLevel > 0:
+            self.broadcastrequest("HEATING_ON", "Heating On")
     
     def resetlevel(self):
         self.heatingLevel = 0

@@ -1,107 +1,133 @@
 #!/user/bin/python
 
-import Queue
-import time
+from constants import Statuses
+
 from temperaturecontroller import TemperatureController
+from workerthread_test import WorkerThreadTestClass, AbstractTestWorkerThread
+import Queue
 
-# TODO: Really, we should have a WorkerThreadTest class and all others inherit from it
-class TestTemperatureController():
+import db
 
-    myQueue = Queue.Queue()
+class TemperatureControllerTestClass(WorkerThreadTestClass, TemperatureController):
 
-    def testRuntime(self):
-        tc = WrappedTemperatureController("TemperatureController", self.myQueue)
-        assert tc.RUNTIME == 120
+    def __init__(self):
+        self.addtestaction("TestTemperatureController.__init__()")
+        self.inqueue = Queue.Queue()
+        self.outqueue = Queue.Queue()
+        super(TemperatureControllerTestClass, self).__init__(self.inqueue, self.outqueue)
 
-    def testDisplayVsSumpTemp(self):
-        sensorQueue = Queue.Queue()
-        sensorQueue.put({"DISPLAY_TEMP":24})
-        sensorQueue.put({"SUMP_TEMP":26.5})
-        sensorQueue.put({"DISPLAY_TEMP":28})
-        sensorQueue.put({"SUMP_TEMP":25.5})
-        sensorQueue.put({"DISPLAY_TEMP":28})
-        sensorQueue.put({"SUMP_TEMP":24})
-        sensorQueue.put({"DISPLAY_TEMP":24})
-        sensorQueue.put({"SUMP_TEMP":28})
-        sensorQueue.put({"DISPLAY_TEMP":25})
-        sensorQueue.put({"SUMP_TEMP":25})
+class TestTemperatureController(AbstractTestWorkerThread):
 
-        tc = WrappedTemperatureController("TemperatureController", self.myQueue)
-        tc.sensorQueue = sensorQueue
+    RUNTIME = 600
 
-        tc.dowork()
-        self.assertstatus(tc, 0)
+    def getobjecttotest(self):
+        return TemperatureControllerTestClass()
 
-        tc.dowork()
-        self.assertstatus(tc, 0)
+    def setup(self):
+        self.testobject.temp_history = []
+        super(TestTemperatureController, self).setup()
 
-        tc.dowork()
-        self.assertstatus(tc, 2)
+    def testnormalrange(self):
+        self.addtestsensor('DISPLAY_TEMP', [ 25 ])
+        self.addtestsensor('SUMP_TEMP', [ 25.5 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 28 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 60 ])
 
-        tc.dowork()
-        self.assertstatus(tc, 2)
+        self.testobject.dowork()
 
-        tc.dowork()
-        self.assertstatus(tc, 0)
+        self.assertdevicestatus('HEATER_1', 0)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
 
-    def testRange(self):
-        sensorQueue = Queue.Queue()
-        sensorQueue.put({"DISPLAY_TEMP":23})
-        sensorQueue.put({"SUMP_TEMP":23.5})
-        sensorQueue.put({"DISPLAY_TEMP":23.7})
-        sensorQueue.put({"SUMP_TEMP":25.5})
-        sensorQueue.put({"DISPLAY_TEMP":24})
-        sensorQueue.put({"SUMP_TEMP":25})
-        sensorQueue.put({"DISPLAY_TEMP":29})
-        sensorQueue.put({"SUMP_TEMP":28})
-        sensorQueue.put({"DISPLAY_TEMP":29.1})
-        sensorQueue.put({"SUMP_TEMP":29.3})
-        sensorQueue.put({"DISPLAY_TEMP":29.6})
-        sensorQueue.put({"SUMP_TEMP":29.3})
-        
-        tc = WrappedTemperatureController("TemperatureController", self.myQueue)
-        tc.sensorQueue = sensorQueue
+        self.assertstatus(Statuses.OK)
+        self.assertstatusmessage("")
+        self.assertinformation("Heating level: 0\r\nTemperature within normal range")
 
-        tc.dowork()
-        self.assertstatus(tc, 2)
+    def testnormalrange_highboundary(self):
+        self.addtestsensor('DISPLAY_TEMP', [ 28.75 ])
+        self.addtestsensor('SUMP_TEMP', [ 32.75 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 27 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 99 ])
 
-        tc.dowork()
-        self.assertstatus(tc, 1)
+        self.testobject.dowork()
 
-        tc.dowork()
-        self.assertstatus(tc, 0)
+        self.assertdevicestatus('HEATER_1', 0)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
 
-        tc.dowork()
-        self.assertstatus(tc, 0)
+        self.assertstatus(Statuses.OK)
+        self.assertstatusmessage("")
+        self.assertinformation("Heating level: 0\r\nTemperature within normal range")
 
-        tc.dowork()
-        self.assertstatus(tc, 1)
+    def testnormalrange_lowboundary(self):
+        self.addtestsensor('DISPLAY_TEMP', [ 24.25 ])
+        self.addtestsensor('SUMP_TEMP', [ 20.25 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 5 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 1 ])
 
-        tc.dowork()
-        self.assertstatus(tc, 2)
+        self.testobject.dowork()
 
-    def assertstatus(self, worker, expectedStatus):
-        print "Assert {0} == {1}".format(worker.status, expectedStatus)
-        assert worker.status == expectedStatus
-        
-class WrappedTemperatureController(TemperatureController):
-    """ Inherited test class """
-    sensorQueue = Queue.Queue()
-    sensorQueueItem = None
+        self.assertdevicestatus('HEATER_1', 0)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
 
-    # TODO: The values can be defined by the test. Index can be reset in setup
-    def readsensor(self, sensor):
-        if self.sensorQueue == None:
-            raise Exception("But it shouldn't be none")
-        
-        if self.sensorQueueItem == None:
-            self.sensorQueueItem = self.sensorQueue.get()
+        self.assertstatus(Statuses.OK)
+        self.assertstatusmessage("")
+        self.assertinformation("Heating level: 0\r\nTemperature within normal range")
 
-        if sensor in self.sensorQueueItem:
-            result = self.sensorQueueItem[sensor]
-            print "Read sensorQueueItem: {0} {1}".format(sensor, result)
-            self.sensorQueueItem = None
-            return result
-        else:
-            return super(WrappedTemperatureController, self).readsensor(sensor)
-        
+    def testdivergence(self):
+        self.addtestsensor('DISPLAY_TEMP', [ 24.25 ])
+        self.addtestsensor('SUMP_TEMP', [ 20.00 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 25 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 50 ])
+
+        self.testobject.dowork()
+
+        self.assertdevicestatus('HEATER_1', 0)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
+
+        self.assertstatus(Statuses.WARNING)
+        self.assertstatusmessage("Sump temperature differs from display temperature by 4.3 degrees. This may indicate that the return pump is not functioning or that the sensor data is incorrect.")
+        self.assertinformation("Heating level: 0\r\nTemperature within normal range")
+
+        # TODO: Assert that a broadcast request has been made to return pump
+
+        self.addtestsensor('DISPLAY_TEMP', [ 24.25 ])
+        self.addtestsensor('SUMP_TEMP', [ 19.00 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 25 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 50 ])
+
+        self.testobject.resetstatus()
+        self.testobject.dowork()
+
+        self.assertdevicestatus('HEATER_1', 1)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
+
+        self.assertstatus(Statuses.ALERT)
+        self.assertstatusmessage("Sump temperature differs from display temperature by 5.3 degrees. This may indicate that the return pump is not functioning or that the sensor data is incorrect.")
+
+        self.addtestsensor('DISPLAY_TEMP', [ 29.25 ])
+        self.addtestsensor('SUMP_TEMP', [ 34.50 ])
+        self.addtestsensor('AMBIENT_TEMP', [ 25 ])
+        self.addtestsensor('AMBIENT_HUMIDITY', [ 50 ])
+
+        self.testobject.resetstatus()
+        self.testobject.dowork()
+
+        self.assertdevicestatus('HEATER_1', 1)
+        self.assertdevicestatus('HEATER_2', 0)
+        self.assertdevicestatus('FAN_DISPLAY', 0)
+        self.assertdevicestatus('FAN_SUMP', 0)
+
+        self.assertstatus(Statuses.ALERT)
+        self.assertstatusmessage("Sump temperature differs from display temperature by 5.3 degrees. This may indicate that the return pump is not functioning or that the sensor data is incorrect.")
+
+
+
